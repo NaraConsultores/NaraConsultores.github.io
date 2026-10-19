@@ -28,6 +28,7 @@ var NaraModelAudit = (() => {
     SIDES: () => SIDES,
     TOOL_CONTRACT: () => TOOL_CONTRACT,
     anchorPoint: () => anchorPoint,
+    anchorPolicy: () => anchorPolicy,
     boxesOverlap: () => boxesOverlap,
     compareSnapshots: () => compareSnapshots,
     inferAnchor: () => inferAnchor,
@@ -35,6 +36,7 @@ var NaraModelAudit = (() => {
     lineHitsBox: () => lineHitsBox,
     orthogonalizeWaypoints: () => orthogonalizeWaypoints,
     planContainerFit: () => planContainerFit,
+    planMovedRoutes: () => planMovedRoutes,
     planOperations: () => planOperations,
     planReconnectPreview: () => planReconnectPreview,
     projectRoute: () => projectRoute,
@@ -97,6 +99,7 @@ var NaraModelAudit = (() => {
     return high >= 0 && low <= 1;
   }
   var boxesOverlap = (a, b) => a.x < b.x + b.width - 0.01 && a.x + a.width > b.x + 0.01 && a.y < b.y + b.height - 0.01 && a.y + a.height > b.y + 0.01;
+  var segmentAlongBox = (a, b, box) => same(a.x, b.x) && (same(a.x, box.x) || same(a.x, box.x + box.width)) && Math.min(a.y, b.y) < box.y + box.height - 0.01 && Math.max(a.y, b.y) > box.y + 0.01 || same(a.y, b.y) && (same(a.y, box.y) || same(a.y, box.y + box.height)) && Math.min(a.x, b.x) < box.x + box.width - 0.01 && Math.max(a.x, b.x) > box.x + 0.01;
 
   // plugins/narabizagui/shared/routing.mjs
   var SIDES = ["top", "right", "bottom", "left"];
@@ -147,7 +150,11 @@ var NaraModelAudit = (() => {
   }
   function routeMetrics(points) {
     const lengths = points.slice(1).map((p, i) => distance(points[i], p));
-    return { length: lengths.reduce((a, b) => a + b, 0), bends: Math.max(0, points.length - 2), shortLegs: lengths.filter((n) => n < 8).length, orthogonal: points.slice(1).every((p, i) => axis(points[i], p) !== 0) };
+    const reversals = points.slice(2).filter((p, i) => axis(points[i], points[i + 1]) === axis(points[i + 1], p) && (points[i + 1].x - points[i].x) * (p.x - points[i + 1].x) + (points[i + 1].y - points[i].y) * (p.y - points[i + 1].y) < 0).length;
+    return { length: lengths.reduce((a, b) => a + b, 0), bends: Math.max(0, points.length - 2), shortLegs: lengths.filter((n) => n < 8).length, reversals, orthogonal: points.slice(1).every((p, i) => axis(points[i], p) !== 0) };
+  }
+  function anchorPolicy(routing, end) {
+    return routing?.anchorPolicy?.[end] || (routing?.[end] ? "fixed" : "auto");
   }
   var Heap = class {
     data = [];
@@ -181,7 +188,7 @@ var NaraModelAudit = (() => {
     const elements = snapshot.elements || [], index = new Map(elements.map((e) => [e.id, e])), connection = index.get(options.elementId), source = index.get(connection?.sourceId), target = index.get(connection?.targetId);
     if (!connection || !rect(source) || !rect(target)) throw fail("ROUTE_GEOMETRY_MISSING", "La conexi\xF3n necesita extremos y l\xEDmites completos en la hoja activa.");
     if (source.id === target.id) throw fail("ROUTE_SELF_LOOP", "Conserva el recorrido manual de un bucle que vuelve a la misma figura.");
-    const saved = connection.routing || {}, sourceSide = options.sourceSide ?? saved.source?.side ?? "auto", targetSide = options.targetSide ?? saved.target?.side ?? "auto";
+    const saved = connection.routing || {}, sourceSide = options.sourceSide ?? (anchorPolicy(saved, "source") === "auto" ? "auto" : saved.source?.side) ?? "auto", targetSide = options.targetSide ?? (anchorPolicy(saved, "target") === "auto" ? "auto" : saved.target?.side) ?? "auto";
     if (![...SIDES, "auto"].includes(sourceSide) || ![...SIDES, "auto"].includes(targetSide)) throw fail("INVALID_ANCHOR", "Selecciona arriba, derecha, abajo, izquierda o autom\xE1tico.");
     const sourceOffset = options.sourceOffset ?? saved.source?.offset ?? 0.5, targetOffset = options.targetOffset ?? saved.target?.offset ?? 0.5, clearance = options.clearance ?? 10;
     if (!Number.isFinite(clearance) || clearance < 2 || clearance > 40) throw fail("INVALID_ROUTE", "La separaci\xF3n debe estar entre 2 y 40.");
@@ -194,7 +201,7 @@ var NaraModelAudit = (() => {
     for (const e of elements) {
       if (rect(e) && !e.waypoints && !["bpmn:Participant", "bpmn:Lane", "bpmn:Group", "bpmn:Process", "bpmn:Collaboration"].includes(e.type) && !ancestors.has(e.id)) {
         const own = [source.id, target.id].includes(e.id), padding = own ? 0 : clearance;
-        const box = { x: e.x - padding, y: e.y - padding, width: e.width + padding * 2, height: e.height + padding * 2, id: e.id };
+        const box = { x: e.x - padding, y: e.y - padding, width: e.width + padding * 2, height: e.height + padding * 2, id: e.id, own };
         if (boxesOverlap(box, area)) obstacles.push(box);
       }
       if (e.id !== connection.id && e.labelBounds && rect(e.labelBounds) && !["bpmn:Group", "bpmn:Lane", "bpmn:Participant"].includes(e.type)) {
@@ -204,7 +211,7 @@ var NaraModelAudit = (() => {
     }
     const others = elements.filter((e) => e.id !== connection.id && e.waypoints?.length > 1);
     const segmentCost = (a, b) => {
-      if (!axis(a, b) || !inBounds(a) || !inBounds(b) || obstacles.some((box) => lineHitsBox(a, b, box))) return Infinity;
+      if (!axis(a, b) || !inBounds(a) || !inBounds(b) || obstacles.some((box) => lineHitsBox(a, b, box) || box.own && segmentAlongBox(a, b, box))) return Infinity;
       let penalty = 0;
       for (const other of others) {
         let crossing = false, overlap = false;
@@ -233,7 +240,7 @@ var NaraModelAudit = (() => {
     }
     function consider(raw, pair) {
       const points = simplifyOrthogonal(raw);
-      if (points.length < 2 || !normal(points[0], points[1], pair.ss) || !normal(points.at(-1), points.at(-2), pair.ts)) return;
+      if (points.length < 2 || routeMetrics(points).reversals || !normal(points[0], points[1], pair.ss) || !normal(points.at(-1), points.at(-2), pair.ts)) return;
       let score = 0;
       for (let i = 1; i < points.length; i++) {
         const cost = segmentCost(points[i - 1], points[i]);
@@ -252,8 +259,8 @@ var NaraModelAudit = (() => {
     }
     const perfect = best && best.score <= distance(best.pair.a, best.pair.b) + 22 + 0.01;
     if (!perfect && obstacles.length <= 90) {
-      const xs = [.../* @__PURE__ */ new Set([...pairs.flatMap((p) => [p.a.x, p.b.x, p.as.x, p.bs.x]), ...obstacles.flatMap((b) => [b.x, b.x + b.width]), area.x, area.x + area.width])].sort((a, b) => a - b);
-      const ys = [.../* @__PURE__ */ new Set([...pairs.flatMap((p) => [p.a.y, p.b.y, p.as.y, p.bs.y]), ...obstacles.flatMap((b) => [b.y, b.y + b.height]), area.y, area.y + area.height])].sort((a, b) => a - b);
+      const xs = [.../* @__PURE__ */ new Set([...pairs.flatMap((p) => [p.a.x, p.b.x, p.as.x, p.bs.x]), ...obstacles.flatMap((b) => [b.x - (b.own ? clearance : 0), b.x + b.width + (b.own ? clearance : 0)]), area.x, area.x + area.width])].sort((a, b) => a - b);
+      const ys = [.../* @__PURE__ */ new Set([...pairs.flatMap((p) => [p.a.y, p.b.y, p.as.y, p.bs.y]), ...obstacles.flatMap((b) => [b.y - (b.own ? clearance : 0), b.y + b.height + (b.own ? clearance : 0)]), area.y, area.y + area.height])].sort((a, b) => a - b);
       if (xs.length * ys.length <= 18e3) {
         const point = (i) => ({ x: xs[i % xs.length], y: ys[Math.floor(i / xs.length)] }), edgeCache = /* @__PURE__ */ new Map();
         const cost = (i, j) => {
@@ -264,10 +271,10 @@ var NaraModelAudit = (() => {
         for (const pair of pairs) {
           const start = ys.indexOf(pair.a.y) * xs.length + xs.indexOf(pair.a.x), end = ys.indexOf(pair.b.y) * xs.length + xs.indexOf(pair.b.x), heap = new Heap(), dist = /* @__PURE__ */ new Map(), previous = /* @__PURE__ */ new Map();
           heap.push({ node: start, dir: 0, cost: 0, score: distance(pair.a, pair.b) });
-          dist.set(start * 3, 0);
+          dist.set(start * 5, 0);
           let found;
           while (heap.data.length) {
-            const current = heap.pop(), key = current.node * 3 + current.dir;
+            const current = heap.pop(), key = current.node * 5 + current.dir;
             if (current.cost !== dist.get(key)) continue;
             if (best && current.score >= best.score) break;
             if (current.node === end) {
@@ -277,11 +284,11 @@ var NaraModelAudit = (() => {
             const x = current.node % xs.length, y = Math.floor(current.node / xs.length), a = point(current.node);
             for (const next of [x > 0 ? current.node - 1 : -1, x + 1 < xs.length ? current.node + 1 : -1, y > 0 ? current.node - xs.length : -1, y + 1 < ys.length ? current.node + xs.length : -1]) {
               if (next < 0) continue;
-              const b = point(next), dir = axis(a, b);
-              if (!current.dir && !normal(a, b, pair.ss) || next === end && !normal(b, a, pair.ts)) continue;
+              const b = point(next), dir = same(a.y, b.y) ? b.x > a.x ? 1 : 2 : b.y > a.y ? 3 : 4;
+              if (current.dir && dir !== current.dir && Math.ceil(dir / 2) === Math.ceil(current.dir / 2) || !current.dir && !normal(a, b, pair.ss) || next === end && !normal(b, a, pair.ts)) continue;
               const edge = cost(current.node, next);
               if (!Number.isFinite(edge)) continue;
-              const value = current.cost + edge + (current.dir && current.dir !== dir ? 22 : 0), nextKey = next * 3 + dir;
+              const value = current.cost + edge + (current.dir && current.dir !== dir ? 22 : 0), nextKey = next * 5 + dir;
               if (value >= (dist.get(nextKey) ?? Infinity)) continue;
               dist.set(nextKey, value);
               previous.set(nextKey, key);
@@ -290,7 +297,7 @@ var NaraModelAudit = (() => {
           }
           if (found !== void 0) {
             const points = [];
-            for (let key = found; key !== void 0; key = previous.get(key)) points.push(point(Math.floor(key / 3)));
+            for (let key = found; key !== void 0; key = previous.get(key)) points.push(point(Math.floor(key / 5)));
             consider(points.reverse(), pair);
           }
         }
@@ -300,7 +307,7 @@ var NaraModelAudit = (() => {
     const metrics = routeMetrics(best.points), minimum = distance(best.pair.a, best.pair.b), warnings = [];
     if (metrics.length > minimum * 2.5 && metrics.length - minimum > 200) warnings.push("ROUTE_DETOUR");
     if (metrics.shortLegs) warnings.push("ROUTE_SHORT_LEG");
-    return { waypoints: best.points, routing: { mode: "orthogonal", source: { side: best.pair.ss, offset: sourceOffset }, target: { side: best.pair.ts, offset: targetOffset } }, metrics, warnings };
+    return { waypoints: best.points, routing: { mode: "orthogonal", manual: false, anchorPolicy: { source: sourceSide === "auto" ? "auto" : "fixed", target: targetSide === "auto" ? "auto" : "fixed" }, source: { side: best.pair.ss, offset: sourceOffset }, target: { side: best.pair.ts, offset: targetOffset } }, metrics, warnings };
   }
 
   // plugins/narabizagui/shared/quality.mjs
@@ -334,8 +341,23 @@ var NaraModelAudit = (() => {
         const metrics = routeMetrics(e.waypoints), simple = simplifyOrthogonal(e.waypoints), first = e.waypoints[0], last = e.waypoints.at(-1), minimum = Math.abs(first.x - last.x) + Math.abs(first.y - last.y);
         if (!metrics.orthogonal) add("ROUTE_DIAGONAL", [e.id], "La conexi\xF3n contiene un tramo diagonal.");
         if (simple.length < e.waypoints.length) add("ROUTE_REDUNDANT_POINTS", [e.id], "El recorrido conserva puntos colineales o repetidos que se pueden eliminar.");
+        if (metrics.reversals) add("ROUTE_REVERSAL", [e.id], "La conexi\xF3n avanza y retrocede inmediatamente sobre el mismo tramo.", { metrics });
         if (metrics.shortLegs && metrics.bends) add("ROUTE_SHORT_LEG", [e.id], "La conexi\xF3n tiene un tramo corto junto a un quiebre.", { metrics });
         if (metrics.length > minimum * 2.5 && metrics.length - minimum > 200) add("ROUTE_DETOUR", [e.id], "La conexi\xF3n hace un rodeo largo; evitar cruces no basta para considerarla una buena ruta.", { metrics, minimum });
+        for (const shape of [index.get(e.sourceId), index.get(e.targetId)].filter(Boolean)) {
+          if (segments(e).some(([a, b]) => lineHitsBox(a, b, shape))) add("ROUTE_THROUGH_ENDPOINT", [e.id, shape.id], "El recorrido atraviesa una de sus propias figuras.");
+          if (segments(e).some(([a, b]) => segmentAlongBox(a, b, shape))) add("ROUTE_ON_FIGURE_BORDER", [e.id, shape.id], "El recorrido circula sobre el borde de una figura en lugar de separarse de ella.");
+        }
+        const source = index.get(e.sourceId), target = index.get(e.targetId);
+        if (source && target && source !== target && !e.routing?.sharedWith) {
+          const gap = Math.max(0, source.x - target.x - target.width, target.x - source.x - source.width) + Math.max(0, source.y - target.y - target.height, target.y - source.y - source.height);
+          if (metrics.length > gap + 80 && metrics.bends > 1) try {
+            const alternative = routeOrthogonal(snapshot, { elementId: e.id, sourceSide: "auto", targetSide: "auto", sourceOffset: 0.5, targetOffset: 0.5 });
+            if (metrics.length > alternative.metrics.length * 1.6 && metrics.length - alternative.metrics.length > 80) add("ROUTE_AVOIDABLE_DETOUR", [e.id], "Existe un recorrido local m\xE1s corto con lados autom\xE1ticos. Revisa la intenci\xF3n y usa Recalcular solo esta conexi\xF3n si corresponde.", { metrics, alternative: alternative.metrics, preservesManualRoute: true, suggestedOperation: { type: "route_orthogonal", elementId: e.id, sourceSide: "auto", targetSide: "auto", sourceOffset: 0.5, targetOffset: 0.5 } });
+          } catch (error) {
+            if (!["ROUTE_BLOCKED", "ROUTE_GEOMETRY_MISSING", "ROUTE_SELF_LOOP"].includes(error.code)) throw error;
+          }
+        }
         for (const [end, point] of [["source", first], ["target", last]]) {
           const anchor = e.routing?.[end], shape = index.get(e[end + "Id"]);
           if (anchor && shape) {
@@ -399,7 +421,7 @@ var NaraModelAudit = (() => {
     const index = new Map(snapshot.elements.map((e) => [e.id, e])), connection = index.get(elementId), source = index.get(sourceId || connection?.sourceId), target = index.get(targetId || connection?.targetId);
     if (!connection || !source || !target) throw fail2("ROUTE_GEOMETRY_MISSING", "Faltan los extremos de la conexi\xF3n.");
     const old = routing || connection.routing || {}, a = sourcePoint ? inferAnchor(source, sourcePoint) : old.source || inferAnchor(source, connection.waypoints[0]), b = targetPoint ? inferAnchor(target, targetPoint) : old.target || inferAnchor(target, connection.waypoints.at(-1));
-    const virtual = { ...connection, sourceId: source.id, targetId: target.id, routing: { mode: "orthogonal", source: a, target: b } };
+    const virtual = { ...connection, sourceId: source.id, targetId: target.id, routing: { ...old, mode: "orthogonal", source: a, target: b, anchorPolicy: { ...old.anchorPolicy, ...sourcePoint ? { source: "fixed" } : {}, ...targetPoint ? { target: "fixed" } : {} } } };
     if (old.manual && connection.waypoints.length > 2) {
       const repair = (points2, shape, anchor) => {
         const first = anchorPoint(shape, anchor.side, anchor.offset), v = { top: [0, -1], right: [1, 0], bottom: [0, 1], left: [-1, 0] }[anchor.side], next = points2[1];
@@ -417,11 +439,67 @@ var NaraModelAudit = (() => {
       points = repair(points, source, a);
       points = repair(points.reverse(), target, b).reverse();
       points = orthogonalizeWaypoints(points, { sourceSide: a.side, targetSide: b.side });
-      if (!segments({ waypoints: points }).some(([p, q]) => lineHitsBox(p, q, source) || lineHitsBox(p, q, target))) return { waypoints: points, routing: { ...old, ...virtual.routing, manual: true } };
+      return { waypoints: points, routing: { ...virtual.routing, manual: true } };
     }
     const plan = routeOrthogonal({ ...snapshot, elements: snapshot.elements.map((e) => e.id === elementId ? virtual : e) }, { elementId });
     if (old.manual) plan.routing.manual = true;
     return plan;
+  }
+  function planMovedRoutes(snapshot, { elementIds, delta = { x: 0, y: 0 } }) {
+    const moved = new Set(elementIds), shift = (p) => ({ ...p, x: p.x + delta.x, y: p.y + delta.y });
+    const elements = snapshot.elements.map((e) => {
+      const both = e.waypoints && moved.has(e.sourceId) && moved.has(e.targetId);
+      return { ...e, ...moved.has(e.id) && !e.waypoints ? shift(e) : {}, ...e.labelBounds && (moved.has(e.id) || moved.has(e.id + "_label")) ? { labelBounds: shift(e.labelBounds) } : {}, ...both ? { waypoints: e.waypoints.map(shift) } : {} };
+    });
+    const data = { ...snapshot, elements }, affectedIds = new Set(elements.filter((e) => e.waypoints?.length > 1 && (moved.has(e.sourceId) || moved.has(e.targetId))).map((e) => e.id)), plans = [];
+    let expanded = true;
+    while (expanded) {
+      expanded = false;
+      for (const e of elements) if (e.routing?.sharedWith && affectedIds.has(e.routing.sharedWith) && !affectedIds.has(e.id)) {
+        affectedIds.add(e.id);
+        expanded = true;
+      }
+    }
+    const affected = elements.filter((e) => affectedIds.has(e.id)).sort((a, b) => a.id.localeCompare(b.id));
+    for (const e of affected) if (e.routing?.manual === false && !e.routing.sharedWith) e.waypoints = [];
+    for (const e of affected.filter((e2) => e2.routing?.manual !== false || e2.routing.sharedWith)) {
+      if (!e.routing) continue;
+      try {
+        const plan = planReconnectPreview(data, e.id, { routing: { ...e.routing, manual: true } });
+        Object.assign(e, plan);
+        plans.push({ elementId: e.id, ...plan });
+      } catch (error) {
+        if (!["ROUTE_BLOCKED", "ROUTE_SELF_LOOP"].includes(error.code)) throw error;
+      }
+    }
+    for (const e of affected.filter((e2) => e2.routing?.manual === false && !e2.routing.sharedWith)) {
+      try {
+        const plan = routeOrthogonal(data, { elementId: e.id });
+        Object.assign(e, plan);
+        plans.push({ elementId: e.id, ...plan });
+      } catch (error) {
+        if (!["ROUTE_BLOCKED", "ROUTE_SELF_LOOP"].includes(error.code)) throw error;
+      }
+    }
+    const resolved = /* @__PURE__ */ new Set(), resolve = (e) => {
+      if (resolved.has(e.id)) return;
+      resolved.add(e.id);
+      const r = e.routing, reference = elements.find((f) => f.id === r?.sharedWith);
+      if (!reference) return;
+      if (affectedIds.has(reference.id)) resolve(reference);
+      const both = moved.has(reference.sourceId) && moved.has(reference.targetId), point = both ? shift(r.joinPoint) : r.joinPoint;
+      try {
+        const plan = shareConnectionPath(data, { elementId: e.id, withConnectionId: reference.id, point, end: r.sharedEnd });
+        Object.assign(e, plan);
+        const slot = plans.findIndex((p) => p.elementId === e.id);
+        if (slot >= 0) plans.splice(slot, 1);
+        plans.push({ elementId: e.id, ...plan });
+      } catch (error) {
+        if (!["ROUTE_BLOCKED", "SHARED_ROUTE_DIAGONAL", "SHARED_ROUTE_EMPTY", "SHARED_ROUTE_CYCLE"].includes(error.code)) throw error;
+      }
+    };
+    for (const e of affected.filter((e2) => e2.routing?.sharedWith)) resolve(e);
+    return plans;
   }
   function shareConnectionTail(snapshot, { elementId, withConnectionId, point, sourceSide, sourceOffset } = {}) {
     const index = new Map(snapshot.elements.map((e) => [e.id, e])), connection = index.get(elementId), reference = index.get(withConnectionId), source = index.get(connection?.sourceId), target = index.get(reference?.targetId);

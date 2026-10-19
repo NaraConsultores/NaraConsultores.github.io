@@ -81,11 +81,11 @@
         let result;
         try {
           if (command.deadline <= Date.now()) throw Object.assign(new Error('El comando venció antes de ejecutarse.'), { code: 'EXPIRED' });
-          if (!['read', 'edit', 'save', 'exportPng', 'validate', 'editBatch'].includes(command.action)) throw new Error('Comando no admitido.');
+          if (!['read', 'edit', 'save', 'exportPng', 'validate', 'editBatch','microsoftStatus','microsoftResolve','microsoftList','microsoftCreate','microsoftOpen','microsoftAttach','microsoftAutosave'].includes(command.action)) throw new Error('Comando no admitido.');
           if(command.args.expectedDocumentId&&command.args.expectedDocumentId!==window.NaraDocumentIdentity?.())throw Object.assign(new Error('El archivo de esta pestaña cambió. Lee el documento correcto antes de continuar.'),{code:'DOCUMENT_MISMATCH'});
-          activity('trabajando',({read:'Leyendo la hoja activa',edit:'Actualizando la hoja activa',save:'Guardando el archivo',exportPng:'Preparando una imagen PNG',validate:'Revisando el modelo',editBatch:'Aplicando un bloque de cambios'})[command.action]);
+          activity('trabajando',({read:'Leyendo la hoja activa',edit:'Actualizando la hoja activa',save:'Guardando el archivo',exportPng:'Preparando una imagen PNG',validate:'Revisando el modelo',editBatch:'Aplicando un bloque de cambios',microsoftStatus:'Consultando conexiones y archivo',microsoftResolve:'Resolviendo el destino Microsoft',microsoftList:'Consultando la carpeta Microsoft',microsoftCreate:'Creando y comprobando el archivo Microsoft',microsoftOpen:'Abriendo el archivo Microsoft',microsoftAttach:'Asociando el archivo verificado',microsoftAutosave:'Comprobando el autoguardado'})[command.action]);
           result = { commandId: command.id, result: await window.NaraBizaguiEditor[command.action](command.args) };
-        } catch (error) { result = { commandId: command.id, error: { code: error.code || 'EDITOR_ERROR', message: error.message,...Object.fromEntries(['busyReason','retryable','retryAfterMs','recovery'].filter(key=>error[key]!==undefined).map(key=>[key,error[key]])) } }; }
+        } catch (error) { result = { commandId: command.id, error: { code: error.code || 'EDITOR_ERROR', message: error.message,...Object.fromEntries(['busyReason','retryable','retryAfterMs','recovery','phase','requestId','created','verified','attached','remote','currentSaved','currentSavedRemote'].filter(key=>error[key]!==undefined).map(key=>[key,error[key]])) } }; }
         activity('conectado',result.error?'La acción necesita revisión: '+result.error.message:'Acción terminada y confirmada por el editor.');
         // Retry only delivery of the result, never execution of an edit or save.
         for (let attempt = 0; attempt < 3; attempt++) {

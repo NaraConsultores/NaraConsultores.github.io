@@ -189,6 +189,8 @@
         straight.onclick = () => safe(() => { naraVisual.orthogonal(element,{preserveSides:true}); hide(); });
         const elbow = button('Línea en ángulo', 'nara-line-elbow', '┐');
         elbow.onclick = () => safe(() => { naraVisual.orthogonal(element,{preserveSides:true}); hide(); });
+        const recalculate=button('Recalcular solo esta conexión con lados automáticos','nara-route-recalculate','↻');
+        recalculate.onclick=()=>safe(()=>{naraVisual.orthogonal(element,{sourceSide:'auto',targetSide:'auto',sourceOffset:.5,targetOffset:.5});hide();});
         const type = button('Cambiar tipo de conexión', 'bpmn-icon-connection-multi');
         type.onclick = () => safe(() => menu(element,'bpmn-replace',type));
         const anchors=button('Elegir lados de conexión','nara-anchor-button','⊥'),options=document.createElement('div');options.className='nara-anchor-options';options.hidden=true;
@@ -196,11 +198,11 @@
         for(const [end,title]of [['source','Salida'],['target','Entrada']]){
           const label=document.createElement('label');label.textContent=title;const select=document.createElement('select');select.setAttribute('aria-label',title+' de la conexión');
           for(const [value,text]of [['auto','Automático'],['top','Arriba'],['right','Derecha'],['bottom','Abajo'],['left','Izquierda']]){const option=document.createElement('option');option.value=value;option.textContent=text;select.appendChild(option);}
-          const routing=naraVisual.readRouting(element),owner=end==='source'?element.source:element.target,point=end==='source'?element.waypoints[0]:element.waypoints.at(-1);select.value=routing?.[end]?.side||window.NaraModelAudit.inferAnchor(owner,point).side;
+          const routing=naraVisual.readRouting(element),owner=end==='source'?element.source:element.target,point=end==='source'?element.waypoints[0]:element.waypoints.at(-1);select.value=window.NaraModelAudit.anchorPolicy(routing,end)==='auto'?'auto':routing?.[end]?.side||window.NaraModelAudit.inferAnchor(owner,point).side;
           select.onchange=()=>safe(()=>{naraVisual.orthogonal(element,{sourceSide:selectors.source.value,targetSide:selectors.target.value});position();});selectors[end]=select;label.appendChild(select);options.appendChild(label);
         }
         anchors.onclick=()=>{options.hidden=!options.hidden;anchors.setAttribute('aria-expanded',String(!options.hidden));};
-        panel.append(straight, elbow, anchors,type); layer.append(panel,options);
+        panel.append(straight, elbow, recalculate,anchors,type); layer.append(panel,options);
       } else {
         const stage = element.type === 'bpmn:Group' && element.id.startsWith(window.NaraStagePrefix?.() || 'Stage_');
         const laneActions = ['lane-insert-above','lane-insert-below'].filter(id => entries[id]);

@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="es">
 <head>
-  <meta name="narabizagui-build" content="c0a50a8f28582e95">
+  <meta name="narabizagui-build" content="7527ff811f606ec0">
   <meta name="narabizagui-mode" content="browser">
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>NaraBizagui by NaraLab</title>
@@ -90,7 +90,7 @@
       </div>
     </aside>
   </main>
-  <footer class="statusbar"><span class="status-dot" aria-hidden="true"></span><span id="status" role="status">Abriendo modelo…</span><span class="status-spacer"></span><span id="attributionHost" title="bpmn.io · licencia del motor de modelado"></span><span class="status-version">Modelador 0.10.1</span><button id="minus" aria-label="Reducir zoom">−</button><input id="zoomRange" type="range" min="10" max="150" value="50" aria-label="Nivel de zoom"><button id="plus" aria-label="Aumentar zoom">+</button><button id="zoomValue" title="Encajar diagrama">50 %</button></footer>
+  <footer class="statusbar"><span class="status-dot" aria-hidden="true"></span><span id="status" role="status">Abriendo modelo…</span><span class="status-spacer"></span><span id="attributionHost" title="bpmn.io · licencia del motor de modelado"></span><span class="status-version">Modelador 0.11.0</span><button id="minus" aria-label="Reducir zoom">−</button><input id="zoomRange" type="range" min="10" max="150" value="50" aria-label="Nivel de zoom"><button id="plus" aria-label="Aumentar zoom">+</button><button id="zoomValue" title="Encajar diagrama">50 %</button></footer>
   <input id="open" type="file" accept=".bpmn,.xml" hidden>
   <section id="fileOwnershipNotice" class="file-ownership-notice" hidden role="status"><span>Abierto en consulta: este archivo se edita en otra pestaña.</span><button id="takeFileEditing">Editar aquí</button></section>
   <dialog id="historyDialog"><div class="history-heading"><h2>Historial de este archivo</h2><button id="closeHistory" aria-label="Cerrar historial">×</button></div><p>Revisiones anteriores conservadas al guardar. Puedes descargar una copia. Este historial depende de los datos de este navegador.</p><label><input id="historyLegacy" type="checkbox"> Ver historial anterior sin identificar</label><div id="historyItems"></div></dialog>
@@ -117,29 +117,29 @@
     <footer class="ms-footer"><button id="msCancel">Cancelar</button><button id="msOpen" class="ms-primary" hidden disabled>Abrir</button><button id="msSave" class="ms-primary" hidden disabled>Guardar</button></footer>
     <details class="ms-privacy"><summary>Permisos y privacidad</summary><p>El permiso de Microsoft permite leer, modificar y eliminar los archivos a los que tu cuenta tiene acceso. NaraBizagui implementa apertura y guardado de BPMN. Para SharePoint se solicita además lectura de sitios.</p><p>La conexión se recuerda en este navegador mediante la biblioteca de Microsoft. Para conservarla al cerrar todo el navegador, elige «Mantener la sesión iniciada» si Microsoft lo permite. Tu organización puede exigir iniciar sesión de nuevo. Cuenta → Desconectar borra el acceso y las referencias recordadas de esta cuenta en NaraBizagui, sin cerrar Microsoft 365.</p><p>Se recuerdan la carpeta, el último BPMN y hasta 12 archivos recientes por cuenta mediante nombres e identificadores. Al volver a entrar, se relee desde Microsoft el último archivo guardado, si el editor está vacío. Limpiar recientes borra la lista y deja de retomar ese archivo. Los BPMN no se conservan en el Historial local: los cambios sin guardar no se recuperan. Si vinculas Codex, el modelo puede enviarse al chat que autorices.</p></details>
   </dialog>
-  <script src="vendor/microsoft-client.js?v=3fc4bdda06aedc45"></script>
+  <script src="vendor/microsoft-client.js?v=0f626bb3b7430f7b"></script>
   <script src="tab-ownership.js?v=95d96466274e1b51"></script>
   <script src="archivos.js?v=93bc8c358e9b4f56"></script>
   <script src="autoguardado.js?v=0bd55020f202bea6"></script>
   <dialog id="sheetDialog" class="codex-dialog" aria-labelledby="sheetDialogHeading"><form id="sheetForm"><div class="history-heading"><h2 id="sheetDialogHeading">Nueva hoja de proceso</h2><button type="button" id="closeSheetDialog" aria-label="Cerrar hoja">×</button></div><p id="sheetKindField"><label for="sheetKind">Tipo de hoja</label><select id="sheetKind"><option value="bpmn">Proceso BPMN</option><option value="erd">Modelo de datos · entidad-relación</option></select></p><p><label for="sheetName">Nombre de la hoja</label><input id="sheetName" maxlength="120" required autocomplete="off"></p><button type="submit" id="saveSheetName">Crear hoja</button></form></dialog>
   <script src="vendor/sheets-import.js?v=fca983fa20ca86c0"></script>
-  <script src="editor-tools.js?v=063d23498ddf6153"></script>
+  <script src="editor-tools.js?v=753278356a70c89f"></script>
   <script src="erd-model.js?v=9094b58dabd647e9"></script>
   <script src="bpmn-merge.js?v=1a79451bae0e236f"></script>
   <script src="erd-editor.js?v=db66c355bbabdf45"></script>
   <script src="sheets.js?v=bd6c2b349fc15b99"></script>
-  <script src="editor-style.js?v=aa6ee822f2bdf8e5"></script>
+  <script src="editor-style.js?v=b5d7097189894073"></script>
   <script src="editor-properties.js?v=80cef0f8efc02a3f"></script>
-  <script src="vendor/model-audit.js?v=d647c43b7ff42b06"></script>
-  <script src="editor-visual.js?v=14e31b6e1d004246"></script>
+  <script src="vendor/model-audit.js?v=16c855ed8f22e318"></script>
+  <script src="editor-visual.js?v=9d538f5e7b22ada4"></script>
   <script src="editor-structure.js?v=61ac2b8e40331e2b"></script>
-  <script src="editor-operations.js?v=4e2e7000dbb6d8b7"></script>
+  <script src="editor-operations.js?v=74d09d1cee456356"></script>
   <script src="editor-readiness.js?v=1fc199795fe392da"></script>
   <script src="editor-blocks.js?v=765337bb24db232a"></script>
-  <script src="modelador.js?v=4743db476b4478ce"></script>
-  <script src="mcp-editor.js?v=ae02e6865d6dc1ba"></script>
-  <script src="mcp-bridge.js?v=ef8ac10428239276"></script>
-  <script src="microsoft-ui.js?v=14fffd90f6240e52"></script>
+  <script src="modelador.js?v=1ba1b81eef77ace5"></script>
+  <script src="mcp-editor.js?v=4cdcb94a9ea18519"></script>
+  <script src="mcp-bridge.js?v=b9b73e929b46ac79"></script>
+  <script src="microsoft-ui.js?v=0be8698d1d0d8cc9"></script>
   <script src="instant-edit.js?v=a5b55f83b2dea674"></script>
   <script src="workspace-ui.js?v=d4a30e557a7ae494"></script>
 </body></html>

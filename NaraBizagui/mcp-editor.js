@@ -25,12 +25,12 @@
   let revision = crypto.randomUUID();
   for (const event of ['commandStack.changed', 'import.done', 'root.set','nara.sheet.changed']) modeler.get('eventBus').on(event, () => { revision = crypto.randomUUID(); });
   const error = (code, message) => Object.assign(new Error(message), { code });
-  const lifecycle=window.NaraEditorReadiness.create({snapshot:()=>({ready,loading:loadingDiagram,starting:window.NaraStartupPending,error:window.diagramError,restoring:window.NaraMicrosoftUI?.restoring()||false,saving,synchronizing:filePolling,readOnly:browserFiles.readOnly,dialog:window.NaraMicrosoftDialogOpen,form:formPending()})});
+  const lifecycle=window.NaraEditorReadiness.create({snapshot:()=>({ready,loading:loadingDiagram,starting:window.NaraStartupPending,error:window.diagramError,restoring:window.NaraMicrosoftUI?.restoring()||false,saving:saving||Boolean(window.NaraMicrosoftOperation),synchronizing:filePolling,readOnly:browserFiles.readOnly,dialog:window.NaraMicrosoftDialogOpen,form:formPending()})});
   function available(readOnly=false) {
     const current=lifecycle.state();if(!(readOnly?current.canRead:current.canEdit))throw lifecycle.failure(current);
   }
   async function waitReady(expected,target,readOnly=false){const current=await lifecycle.wait(readOnly?'read':'edit',5000);if(!(readOnly?current.canRead:current.canEdit))throw lifecycle.failure(current);if(readOnly){if(target&&target!==browserFiles.documentId)throw error('DOCUMENT_MISMATCH','El archivo cambió. Lee nuevamente.');if(expected!==revision)throw error('REVISION_CONFLICT','El diagrama cambió. Lee nuevamente.');if(formPending())throw error('FORM_PENDING','Termina la edición pendiente antes de exportar.');}else guard(expected,target);return current.waitMs;}
-  const runtime=()=>({documentId:browserFiles.documentId,readOnly:Boolean(browserFiles.readOnly),connection:window.NaraMcpConnectionInfo?.()||null,readiness:lifecycle.state(),autoSave:{enabled:window.naraAutoSave?.enabled??false,running:saving,dirty,blocked:window.naraAutoSave?.blocked?.code||null}});
+  const runtime=()=>({documentId:browserFiles.documentId,readOnly:Boolean(browserFiles.readOnly),target:fileTarget(),remote:browserFiles.handle?.remoteInfo?.()||null,connection:window.NaraMcpConnectionInfo?.()||null,readiness:lifecycle.state(),autoSave:{enabled:window.naraAutoSave?.enabled??false,running:saving,dirty,blocked:window.naraAutoSave?.blocked?.code||null}});
   let serialized=null;
   function formPending() {
     return window.NaraPropertyDraftPending();
@@ -39,6 +39,7 @@
     if(target&&target!==browserFiles.documentId)throw error("DOCUMENT_MISMATCH","El archivo cambió. Lee el documento correcto antes de continuar.");
     available();
     if (blocks?.recovery(false)) throw error('BATCH_RECOVERY_REQUIRED', 'Conserva la copia anterior del bloque y revisa el estado antes de editar.');
+    if (window.NaraMicrosoftRecovery) throw error('RECOVERY_REQUIRED', 'Hay una transición de archivo pendiente de recuperación. Conserva su copia antes de editar.');
     if (expected !== revision) throw error('REVISION_CONFLICT', 'El diagrama cambió después de la lectura. Lee la revisión actual y conserva las ediciones manuales.');
     if (formPending()) throw error('FORM_PENDING', 'Hay texto sin aplicar en Propiedades. El usuario debe aplicarlo o descartarlo antes de editar mediante Codex.');
   }
@@ -66,7 +67,7 @@
     if(!serialized||serialized.revision!==base){const {xml}=await modeler.saveXML({format:true});const sha256=await browserFiles.digest(xml);if(base===revision)serialized={revision:base,xml,sha256};else throw error('REVISION_CONFLICT','El diagrama cambió durante la lectura. Lee nuevamente.');}
     const {xml,sha256}=serialized;
     if (base !== revision) throw error('REVISION_CONFLICT', 'El diagrama cambió durante la lectura. Lee nuevamente.');
-    const present=state=>{Object.assign(state,runtime(),{documentReady:true});Object.assign(state.capabilities,{protocolVersion:window.NaraModelAudit?.PROTOCOL_VERSION||5,toolContract:window.NaraModelAudit?.TOOL_CONTRACT||'visual-quality-v1',matrix:state.diagramType==='bpmn'&&Boolean(window.NaraMcpStructure),clearActive:state.diagramType==='bpmn'&&Boolean(window.NaraMcpStructure),fit:true,documentGuard:true,tabIsolation:true,compactRead:true,compactBatch:true,batchPresentation:true,visualFormatting:state.diagramType==='bpmn',activityResize:state.diagramType==='bpmn',fitText:state.diagramType==='bpmn',orthogonalRouting:state.diagramType==='bpmn',persistentAnchors:state.diagramType==='bpmn',visualQuality:true,waitForReadyMs:5000,waitForAutoSaveMs:5000});if(detail==='summary')return window.NaraEditorReadiness.compact(state);return state;};
+    const present=state=>{Object.assign(state,runtime(),{documentReady:true});Object.assign(state.capabilities,{protocolVersion:window.NaraModelAudit?.PROTOCOL_VERSION||5,toolContract:window.NaraModelAudit?.TOOL_CONTRACT||'visual-quality-v1',microsoftFiles:window.NaraMicrosoftFiles?.capabilities||null,matrix:state.diagramType==='bpmn'&&Boolean(window.NaraMcpStructure),clearActive:state.diagramType==='bpmn'&&Boolean(window.NaraMcpStructure),fit:true,documentGuard:true,tabIsolation:true,compactRead:true,compactBatch:true,batchPresentation:true,visualFormatting:state.diagramType==='bpmn',activityResize:state.diagramType==='bpmn',fitText:state.diagramType==='bpmn',orthogonalRouting:state.diagramType==='bpmn',persistentAnchors:state.diagramType==='bpmn',adaptiveRouting:state.diagramType==='bpmn',localRouteRecalculation:state.diagramType==='bpmn',visualQuality:true,waitForReadyMs:5000,waitForAutoSaveMs:5000});if(detail==='summary')return window.NaraEditorReadiness.compact(state);return state;};
     const canvas = modeler.get('canvas'), er=window.NaraER,activeSheetId = er?.active() || canvas.getRootElement().id;
     if(er?.active()){
       const dataModel=er.read(),elements=[...dataModel.tables.map(t=>({...t,type:'nara:Entity',height:window.NaraERModel.height(t)})),...dataModel.relationships.map(r=>({...r,type:'nara:Relationship'}))];
@@ -148,7 +149,7 @@
       const target = op.parentId ? element(op.parentId) : affected.parent;
       const delta = { x: op.dx, y: op.dy };
       if (!rules.allowed('elements.move', { shapes: [affected], delta, target })) throw error('BPMN_RULE', 'El movimiento no está permitido.');
-      modeling.moveShape(affected, delta, target);
+      modeling.moveElements([affected], delta, target);
     } else if (op.type === 'resize') {
       affected = element(op.elementId);
       if (![op.x, op.y, op.width, op.height].every(Number.isFinite) || op.width < 20 || op.height < 20 || !rules.allowed('shape.resize', { shape: affected })) throw error('BPMN_RULE', 'No se permite ese tamaño para el elemento.');
@@ -156,7 +157,7 @@
     } else if (op.type === 'route') {
       affected = element(op.elementId);
       if (!affected.waypoints || !Array.isArray(op.waypoints) || op.waypoints.length < 2 || op.waypoints.length > 100 || op.waypoints.some(p => !Number.isFinite(p.x) || !Number.isFinite(p.y))) throw error('INVALID_OPERATION', 'El trazado requiere una conexión y entre 2 y 100 puntos válidos.');
-      modeling.updateWaypoints(affected, op.waypoints.map(p => ({ x: p.x, y: p.y })));
+      window.NaraVisual.create(modeler).manualRoute(affected,op.waypoints.map(p => ({ x: p.x, y: p.y })));
     } else if (op.type === 'delete') {
       affected = element(op.elementId);
       if (!affected.parent) throw error('BPMN_RULE', 'No se puede eliminar la raíz.');
@@ -219,7 +220,7 @@
       byId('externalChange').hidden = true;
       status(handle.storageKind === 'microsoft' ? 'Archivo guardado por Codex en Microsoft · Escritura comprobada.' : 'Archivo guardado por Codex · Escritura comprobada e historial conservado.');
       window.naraAutoSave?.reset();
-      return { documentId:browserFiles.documentId,saved: true, storage: handle.storageKind === 'microsoft' ? 'microsoft' : 'local', savedRevision: expectedRevision, revision, sha256, fileName: browserFiles.name, dirty };
+      return { documentId:browserFiles.documentId,saved: true, storage: handle.storageKind === 'microsoft' ? 'microsoft' : 'local', savedRevision: expectedRevision, revision, sha256, fileName: browserFiles.name, dirty,remote:handle.remoteInfo?.()||null };
     } catch (cause) {
       if(cause.code==='EXTERNAL_CHANGE'){
         saving=false;filePolling=true;
@@ -266,5 +267,75 @@
     const state = await read(); if (expectedRevision !== revision) throw error('REVISION_CONFLICT', 'El diagrama cambió durante la validación.');
     return { revision, sha256:state.sha256, activeSheetId:state.activeSheetId, ...window.NaraModelAudit.validateSnapshot(state, { profile, geometry, maxIssues }),quality:geometry?window.NaraModelAudit.reviewVisualQuality(state,{elementIds,maxIssues}):undefined };
   }
-  window.NaraBizaguiEditor = Object.freeze({ read, edit, save, exportPng, validate, editBatch: args => { if(args.expectedDocumentId&&args.expectedDocumentId!==browserFiles.documentId)throw error("DOCUMENT_MISMATCH","El archivo cambió. Lee nuevamente.");return blocks.batch(args); } });
+  const localHandles=new WeakMap();
+  function fileTarget(){
+    const handle=browserFiles.handle;if(!handle)return null;
+    if(handle.storageKind==='microsoft')return{storage:'microsoft',driveId:handle.driveId,itemId:handle.itemId};
+    if(!localHandles.has(handle))localHandles.set(handle,crypto.randomUUID());
+    return{storage:'local',localRef:localHandles.get(handle),name:browserFiles.name};
+  }
+  const fileAdapter={
+    state:()=>({revision,documentId:browserFiles.documentId,target:fileTarget(),handle:browserFiles.handle,dirty,recoveryRequired:Boolean(window.NaraMicrosoftRecovery),unappliedProperties:formPending()||Boolean(typeof browserEditPending==='function'&&browserEditPending()),uncertain:Boolean(browserFiles.handle&&(browserFiles.uncertain===browserFiles.handle||browserFiles.handle.uncertain))||['SAVE_UNCERTAIN','SAVE_NOT_VERIFIED','RESULT_UNKNOWN'].includes(window.naraAutoSave?.blocked?.code),readiness:lifecycle.state(),...runtime()}),
+    prepare:async expected=>{await waitReady(expected);if(!(standalone||detached))throw error('FILE_MODE_UNSUPPORTED','Abre una pestaña de archivo independiente para usar Microsoft.');},
+    snapshot:async()=>({xml:(await modeler.saveXML({format:true})).xml}),
+    lock:()=>{const previous=document.body.inert;window.NaraMicrosoftOperation=true;document.body.inert=true;window.naraAutoSave?.cancel();return()=>{window.NaraMicrosoftOperation=false;document.body.inert=previous;window.naraAutoSave?.refresh();};},
+    enableAutoSave:value=>{byId('autoSaveEnabled').checked=value;window.naraAutoSave.enable(value);},
+    attach:async(source,check,enabled)=>{
+      const hash=await browserFiles.digest(source.xml);check();
+      await browserFiles.attach({...source,hash});
+      browserDocumentVersion++;revision=crypto.randomUUID();serialized=null;setDirty(false);browserFileContext(source.name);
+      fileAdapter.enableAutoSave(enabled);status('Archivo Microsoft asociado · Bytes y destino comprobados.');
+    },
+    validateSource:async xml=>{
+      browserFiles.validate(xml);
+      const host=document.createElement('div');host.style.cssText='position:fixed;left:-20000px;width:1200px;height:800px;visibility:hidden';document.body.appendChild(host);
+      const draft=new BpmnJS({container:host,moddleExtensions:{nara:window.NaraERModdle}});
+      try{
+        const imported=await draft.importXML(xml);if(imported.warnings.length)throw error('INVALID_BPMN','La importación temporal contiene advertencias. Conserva el documento actual.');
+        const definitions=draft.getDefinitions();
+        for(const extension of definitions.extensionElements?.values||[])if(extension.$type==='nara:EntityRelationship')window.NaraERModel.validate(JSON.parse(extension.json));
+        for(const diagram of definitions.diagrams||[]){const opened=await draft.open(diagram);if(opened.warnings?.length)throw error('INVALID_BPMN','Una hoja adicional contiene advertencias de importación.');}
+      }
+      finally{draft.destroy();host.remove();}
+    },
+    open:async(source,check,enabled)=>{
+      const previousXml=(await modeler.saveXML({format:true})).xml,previous={handle:browserFiles.handle,name:browserFiles.name,hash:browserFiles.hash,version:browserFiles.version,baseXml:browserFiles.baseXml,uncertain:browserFiles.uncertain},previousDocumentId=browserFiles.documentId,previousDirty=dirty,documentVersion=browserDocumentVersion;
+      const view=modeler.get('canvas').viewbox(),erView=window.NaraER?.active()?window.NaraER.view():null,sheetId=window.NaraER?.active()||modeler.get('canvas').getRootElement()?.id;
+      check();loadingDiagram=true;
+      try{
+        await openDiagram(source.xml);check.identity();
+        if(browserFiles.handle!==previous.handle||browserDocumentVersion!==documentVersion)throw error('FILE_CHANGED','Cambió el documento durante la importación.');
+        const hash=await browserFiles.digest(source.xml);check.identity();
+        if(browserFiles.handle!==previous.handle||browserDocumentVersion!==documentVersion)throw error('FILE_CHANGED','Cambió el destino antes de asociarlo.');
+        await browserFiles.attach({...source,hash});browserDocumentVersion++;revision=crypto.randomUUID();serialized=null;
+        browserFileContext(source.name);setDirty(false);fileAdapter.enableAutoSave(enabled);
+      }catch(cause){
+        try{
+          await openDiagram(previousXml);
+          if((await modeler.saveXML({format:true})).xml!==previousXml)throw error('RECOVERY_REQUIRED','La restauración no coincide con la instantánea.');
+          let sameIdentity=true;try{check.identity();}catch{sameIdentity=false;}
+          if(sameIdentity&&(browserFiles.handle!==previous.handle||browserFiles.documentId!==previousDocumentId)){
+            if(previous.handle)await browserFiles.attach({...previous,xml:previousXml});
+            else browserFiles.detach();
+          }else if(!sameIdentity)browserFiles.detach();
+          Object.assign(browserFiles,previous);if(sameIdentity&&!previous.handle)browserFiles.documentId=previousDocumentId;
+          if(!sameIdentity){browserFiles.handle=null;browserFiles.hash=null;}
+          browserDocumentVersion++;revision=crypto.randomUUID();serialized=null;setDirty(sameIdentity?previousDirty:true);browserFileContext(previous.name);
+          if(modeler.get('naraSheets').list().some(s=>s.id===sheetId))modeler.get('naraSheets').open(sheetId);
+          if(erView)window.NaraER.restoreView(erView);else modeler.get('canvas').viewbox(view);
+        }catch(restoreError){window.NaraMicrosoftRecovery={xml:previousXml,context:previous,message:restoreError.message};throw error('RECOVERY_REQUIRED','La apertura falló y la recuperación requiere revisión. La instantánea sigue en memoria.');}
+        throw cause;
+      }finally{loadingDiagram=false;}
+    },
+    saveCurrent:async(expected,check=()=>{})=>{
+      const handle=browserFiles.handle;if(!handle)throw error('FILE_SELECTION_REQUIRED','Conserva el documento en un destino explícito antes de abrir otro.');
+      if(handle.queryPermission&&await handle.queryPermission({mode:'readwrite'})!=='granted')throw error('FILE_PERMISSION_REQUIRED','El destino actual necesita autorización en el editor.');
+      const xml=(await modeler.saveXML({format:true})).xml;check();if(revision!==expected)throw error('REVISION_CONFLICT','El documento cambió antes de guardar.');
+      saving=true;
+      try{await browserFiles.save(xml,handle,{canCommit:()=>{try{check();return revision===expected&&browserFiles.handle===handle;}catch{return false;}}});if(revision===expected)setDirty(false);}
+      finally{saving=false;}
+    }
+  };
+  const microsoftActions=Object.fromEntries(['Status','Resolve','List','Create','Open','Attach','Autosave'].map(suffix=>['microsoft'+suffix,args=>{if(!window.NaraMicrosoftFiles)throw error('EDITOR_NOT_READY','Microsoft aún se está preparando.');return window.NaraMicrosoftFiles[suffix.toLowerCase()](args);} ]));
+  window.NaraBizaguiEditor = Object.freeze({ read, edit, save, exportPng, validate, fileAdapter, ...microsoftActions,editBatch: args => { if(args.expectedDocumentId&&args.expectedDocumentId!==browserFiles.documentId)throw error("DOCUMENT_MISMATCH","El archivo cambió. Lee nuevamente.");return blocks.batch(args); } });
 })();

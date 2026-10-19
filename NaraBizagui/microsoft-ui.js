@@ -1,6 +1,7 @@
 'use strict';
 (() => {
   const { auth, files: cloud, workspace } = window.NaraMicrosoft.create();
+  if(window.NaraBizaguiEditor?.fileAdapter&&window.NaraMicrosoft.FileLifecycle)window.NaraMicrosoftFiles = new window.NaraMicrosoft.FileLifecycle({auth,files:cloud,workspace,editor:window.NaraBizaguiEditor.fileAdapter});
   const dialog = byId('microsoftDialog'), list = byId('msFileList');
   let mode = 'open', provider = 'onedrive', folder = null, parents = [], nextLink = null;
   let listingId = 0, busy = false, selected = null, restoring = true, recentView = false, resumeCancelled = false;
@@ -53,7 +54,7 @@
   function open(which = 'open') {
     resumeCancelled = true;
     if (restoring) return status('Espera a que termine la recuperación de Microsoft.');
-    if (busy || saving || loadingDiagram || filePolling || !ready) return status('Espera a que termine la operación del archivo.');
+    if (window.NaraMicrosoftOperation || busy || saving || loadingDiagram || filePolling || !ready) return status('Espera a que termine la operación del archivo.');
     if (window.NaraPropertyDraftPending()) return status('Aplica o descarta el texto de Propiedades antes de abrir Microsoft.');
     reset(); mode = which; provider = 'onedrive'; recentView = false;
     byId('msFileName').value = browserFiles.name;
@@ -209,7 +210,7 @@
     saving = true; controls(); const sequence = editSequence, account = cloud.accountId();
     try {
       const { xml } = await modeler.saveXML({ format: true }); browserFiles.validate(xml);
-      const handle = await cloud.create(folder, byId('msFileName').value, xml);
+      const {handle} = await cloud.createExclusive(folder, byId('msFileName').value, xml, {beforeWrite:()=>cloud.assertAccount(account)});
       cloud.assertAccount(account);
       await browserFiles.attach({ handle, name: handle.name, xml }); browserFileContext(handle.name);
       try { cloud.assertAccount(account); } catch (error) { detachCloud(); throw error; }

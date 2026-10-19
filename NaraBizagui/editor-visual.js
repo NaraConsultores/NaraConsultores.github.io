@@ -6,6 +6,13 @@
   const external=e=>e.type==='label'||/(?:Event|Gateway|Flow|Reference)$/.test(e.type);
   function installHistoryGuards(events,registry,modeling){
     const labels=new Map();
+    // Native lane reparenting removes/re-appends nodes even when their BPMN
+    // process is unchanged. Undo must restore that process/DI order as well.
+    events.on('commandStack.elements.move.preExecute',1800,({context:c})=>{
+      const parents=new Set(registry.getAll().flatMap(e=>[e.businessObject?.$parent,e.di?.$parent,e.businessObject?.processRef?.$parent]).filter(Boolean));c.naraMoveOrder=[];
+      for(const parent of parents)for(const key of ['flowElements','artifacts','participants','messageFlows','planeElement','rootElements']){const values=parent.get(key);if(Array.isArray(values))c.naraMoveOrder.push({values,before:values.slice()});}
+    });
+    events.on('commandStack.elements.move.reverted',500,({context:c})=>{for(const {values,before}of c.naraMoveOrder||[]){const current=new Set(values);values.splice(0,values.length,...before.filter(v=>current.has(v)),...values.filter(v=>!before.includes(v)));}});
     events.on(['commandStack.shape.delete.preExecute','commandStack.connection.delete.preExecute'],1800,({context:c})=>{
       const e=c.shape||c.connection,bo=e?.businessObject,parents=[bo?.$parent,e?.di?.$parent,bo?.processRef?.$parent];c.naraParentOrder=[];
       for(const parent of parents.filter(Boolean))for(const key of ['flowElements','artifacts','participants','messageFlows','planeElement','rootElements']){const values=parent.get(key);if(Array.isArray(values))c.naraParentOrder.push({values,before:values.slice()});}
@@ -121,11 +128,12 @@
     function planRoute(element,options={}){
       return window.NaraModelAudit.routeOrthogonal(snapshot(),{...options,elementId:element.id});
     }
+    function edgeAnchor(shape,point){if(!point)return null;const anchor=window.NaraModelAudit.inferAnchor(shape,point),edge=anchor&&window.NaraModelAudit.anchorPoint(shape,anchor.side,anchor.offset);return edge&&Math.hypot(edge.x-point.x,edge.y-point.y)<=2?anchor:null;}
     stack.registerHandler('nara.visual.route',function(){
       this.preExecute=c=>{
         const connection=c.element;
         let result=c.plan;
-        if(c.waypoints){const source=window.NaraModelAudit.inferAnchor(connection.source,c.waypoints[0]),target=window.NaraModelAudit.inferAnchor(connection.target,c.waypoints.at(-1));result={waypoints:orthogonalizeWaypoints(c.waypoints,{sourceSide:source.side,targetSide:target.side}),routing:{mode:'orthogonal',manual:true,source,target}};}
+        if(c.waypoints){const source=window.NaraModelAudit.inferAnchor(connection.source,c.waypoints[0]),target=window.NaraModelAudit.inferAnchor(connection.target,c.waypoints.at(-1));result={waypoints:orthogonalizeWaypoints(c.waypoints,{sourceSide:source.side,targetSide:target.side}),routing:{mode:'orthogonal',manual:true,anchorPolicy:{source:'fixed',target:'fixed'},source,target}};}
         else if(!result)result=planRoute(connection,c.options);
         result={...result,routing:{...result.routing,manual:result.routing.manual??false}};putExtension(connection,'nara:ConnectionRouting',result.routing);modeling.updateWaypoints(connection,result.waypoints,{naraExplicitRoute:true});c.result=result;
       };this.execute=this.revert=c=>[c.element];
@@ -214,6 +222,36 @@
         const copied=get('moddleCopy')?.copyElement(previous,get('bpmnFactory').create('bpmn:Collaboration'),['documentation','extensionElements']);
         for(const key of ['documentation','extensionElements'])if(!next[key]&&copied?.[key]){next[key]=copied[key];if(Array.isArray(next[key]))for(const value of next[key])value.$parent=next;else next[key].$parent=next;}
       });
+      // Native MovePreview translates figure ghosts but omits incident edges.
+      // Render our plans in the untransformed layer, using the rounded drop delta.
+      events.on('shape.move.move',200,event=>{
+        const c=event.context;c.naraMovePreview?.remove();c.naraMovePreview=null;for(const e of c.naraMoveMarked||[])canvas.removeMarker(e,'djs-dragging');c.naraMoveMarked=[];
+        if(!c.canExecute||!c.allDraggedElements)return;
+        const data=c.naraMoveSnapshot||(c.naraMoveSnapshot=snapshot()),ids=c.allDraggedElements.filter(e=>!e.waypoints).map(e=>e.id),delta={x:Math.round(event.dx),y:Math.round(event.dy)};
+        const plans=window.NaraModelAudit.planMovedRoutes(data,{elementIds:ids,delta}),group=document.createElementNS('http://www.w3.org/2000/svg','g');group.setAttribute('class','djs-drag-group nara-route-preview');group.style.pointerEvents='none';
+        for(const plan of plans){const connection=registry.get(plan.elementId),original=registry.getGraphics(connection)?.querySelector('.djs-visual'),visual=original?.cloneNode(true);if(!visual)continue;
+          if(!c.allDraggedElements.includes(connection)){canvas.addMarker(connection,'djs-dragging');c.naraMoveMarked.push(connection);}
+          // Markers contain paths too. Reuse their original definitions instead
+          // of duplicating IDs or accidentally replacing the arrowhead path.
+          visual.querySelectorAll('defs').forEach(e=>e.remove());const path=visual.querySelector(':scope > path');
+          if(path){const rendered=document.createElementNS('http://www.w3.org/2000/svg','g');get('graphicsFactory').drawConnection(rendered,{...connection,businessObject:connection.businessObject,di:connection.di,source:connection.source,target:connection.target,waypoints:plan.waypoints});path.setAttribute('d',rendered.querySelector(':scope > path').getAttribute('d'));}group.appendChild(visual);
+        }
+        canvas.getActiveLayer().appendChild(group);c.naraMovePreview=group;c.naraMovePlans=plans;
+      });
+      events.on('shape.move.cleanup',200,({context:c})=>{c.naraMovePreview?.remove();c.naraMovePreview=null;for(const e of c.naraMoveMarked||[])canvas.removeMarker(e,'djs-dragging');c.naraMoveMarked=[];});
+      events.on('commandStack.elements.move.preExecute',1700,({context:c})=>{c.naraMoveSnapshot=snapshot();});
+      events.on('commandStack.elements.move.postExecuted',300,({context:c})=>{
+        const ids=Object.keys(c.closure.allShapes),plans=window.NaraModelAudit.planMovedRoutes(c.naraMoveSnapshot,{elementIds:ids,delta:c.delta});
+        for(const plan of plans){const connection=registry.get(plan.elementId),r=readRouting(connection);if(!r)continue;
+          if(JSON.stringify(r)!==JSON.stringify(plan.routing))putExtension(connection,'nara:ConnectionRouting',plan.routing);
+          if(JSON.stringify(connection.waypoints.map(p=>({x:p.x,y:p.y})))!==JSON.stringify(plan.waypoints))modeling.updateWaypoints(connection,plan.waypoints,{naraExplicitRoute:true});
+        }
+      });
+      events.on('commandStack.connection.layout.postExecute',1400,({context:c})=>{
+        const connection=c.connection,r=readRouting(connection);if(!r)return;
+        const source=window.NaraModelAudit.inferAnchor(connection.source,connection.waypoints[0]),target=window.NaraModelAudit.inferAnchor(connection.target,connection.waypoints.at(-1));
+        if(JSON.stringify(r.source)!==JSON.stringify(source)||JSON.stringify(r.target)!==JSON.stringify(target))putExtension(connection,'nara:ConnectionRouting',{...r,source,target});
+      });
       events.on('commandStack.connection.delete.preExecute',1600,({context:c})=>{for(const e of registry.getAll().filter(e=>e.waypoints&&readRouting(e)?.sharedWith===c.connection.id)){const routing={...readRouting(e)};delete routing.sharedWith;delete routing.sharedEnd;delete routing.joinPoint;putExtension(e,'nara:ConnectionRouting',routing);}});
       const pendingSnap=new WeakMap(),pendingInteractive=new WeakMap();
       function nearbyEndpoint(event){
@@ -291,10 +329,10 @@
         if(snap){const end=c.connection.target===snap.reference.target?'target':'source';try{const plan=sharedPlan(c.connection,snap.reference,snap.point,end);putExtension(c.connection,'nara:ConnectionRouting',plan.routing);c.newWaypoints=plan.waypoints;return;}catch(error){if(!['ROUTE_BLOCKED','SHARED_ROUTE_CYCLE'].includes(error.code))throw error;}}
         const interactive=c.hints?.segmentMove||c.hints?.bendpointMove;
         let points=c.newWaypoints.map(p=>({...p}));
-        if(r?.mode==='orthogonal'&&!interactive){points=repairEndpoint(points,c.connection.source,r.source);points=repairEndpoint(points.reverse(),c.connection.target,r.target).reverse();}
+        if(r?.mode==='orthogonal'&&!interactive&&r.manual){points=repairEndpoint(points,c.connection.source,r.source);points=repairEndpoint(points.reverse(),c.connection.target,r.target).reverse();}
         const source=interactive||!r?window.NaraModelAudit.inferAnchor(c.connection.source,points[0]):r.source,target=interactive||!r?window.NaraModelAudit.inferAnchor(c.connection.target,points.at(-1)):r.target;
         c.newWaypoints=orthogonalizeWaypoints(points,{sourceSide:source.side,targetSide:target.side});
-        if(interactive||!r)putExtension(c.connection,'nara:ConnectionRouting',{mode:'orthogonal',manual:!!interactive,source,target});
+        if(interactive||!r)putExtension(c.connection,'nara:ConnectionRouting',{mode:'orthogonal',manual:!!interactive,anchorPolicy:{source:interactive?'fixed':'auto',target:interactive?'fixed':'auto'},source,target});
       });
       const synchronizing=new Set();
       events.on(['commandStack.connection.updateWaypoints.postExecute','commandStack.connection.layout.postExecute'],500,event=>{
@@ -310,12 +348,13 @@
         const docking=c.dockingOrPoints,points=Array.isArray(docking)?docking:connection.waypoints,hints=c.hints||{},side=hints.docking;
         const source=side!=='target'?window.NaraModelAudit.inferAnchor(connection.source,hints.connectionStart||(Array.isArray(docking)?docking[0]:docking)||points[0]):old.source;
         const target=side!=='source'?window.NaraModelAudit.inferAnchor(connection.target,hints.connectionEnd||(Array.isArray(docking)?docking.at(-1):docking)||points.at(-1)):old.target;
-        putExtension(connection,'nara:ConnectionRouting',{...old,source,target});
+        putExtension(connection,'nara:ConnectionRouting',{...old,source,target,anchorPolicy:{...old.anchorPolicy,...(side!=='target'?{source:'fixed'}:{}),...(side!=='source'?{target:'fixed'}:{})}});
       });
       events.on('commandStack.connection.reconnect.postExecute',400,({context:c})=>reconnectPlans.delete(c.connection));
       events.on('commandStack.connection.create.postExecute',500,event=>{
         const c=event.context,connection=c.connection;if(!connection?.source||!connection?.target||connection.source===connection.target||readRouting(connection))return;
-        try{orthogonal(connection,{sourceSide:c.hints?.connectionStart?window.NaraModelAudit.inferAnchor(connection.source,c.hints.connectionStart).side:'auto'});}catch(error){if(error.code!=='ROUTE_BLOCKED')throw error;manualRoute(connection,connection.waypoints);}
+        const anchor=edgeAnchor(connection.source,c.hints?.connectionStart);
+        try{orthogonal(connection,{sourceSide:anchor?.side||'auto',...(anchor?{sourceOffset:anchor.offset}:{})});}catch(error){if(error.code!=='ROUTE_BLOCKED')throw error;manualRoute(connection,connection.waypoints);}
       });
       events.on(['shape.changed','shape.added'],400,event=>decorate(event.element));
       events.on('import.done',400,()=>registry.getAll().forEach(decorate));
@@ -327,8 +366,11 @@
         const normalize=points=>orthogonalizeWaypoints(points,{sourceSide:window.NaraModelAudit.inferAnchor(hints.source||connection.source,points[0])?.side,targetSide:window.NaraModelAudit.inferAnchor(hints.target||connection.target,points.at(-1))?.side});
         const routing=readRouting(connection);if(routing?.mode!=='orthogonal')return normalize(native(connection,hints));
         if(routing.sharedWith){const reference=registry.get(routing.sharedWith);if(reference&&connection[routing.sharedEnd||'target']===reference[routing.sharedEnd||'target'])try{return sharedPlan(connection,reference,routing.joinPoint,routing.sharedEnd).waypoints;}catch(error){if(!['ROUTE_BLOCKED','SHARED_ROUTE_DIAGONAL'].includes(error.code))throw error;}}
+        // Reconnect hints are intentional docking choices; shape movement uses
+        // the persisted automatic/fixed policy instead of its inherited hints.
         if(routing.manual)return window.NaraModelAudit.planReconnectPreview(snapshot(),connection.id,{routing}).waypoints;
         try{return planRoute(connection).waypoints;}catch(error){
+          if(!['ROUTE_BLOCKED','ROUTE_SELF_LOOP'].includes(error.code))throw error;
           // Keep native undo/movement intact when an imported or crowded layout
           // has no local solution. The subsequent quality audit reports it.
           return normalize(native(connection,{...hints,connectionStart:window.NaraModelAudit.anchorPoint(connection.source,routing.source.side,routing.source.offset),connectionEnd:window.NaraModelAudit.anchorPoint(connection.target,routing.target.side,routing.target.offset)}));

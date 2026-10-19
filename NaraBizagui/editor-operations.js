@@ -83,7 +83,7 @@
         } else if (op.type === 'move' || op.type === 'move_elements') {
           const shapes = op.elementIds ? op.elementIds.map(element) : [e], target = op.parentId ? element(op.parentId) : e.parent, delta = { x: op.dx, y: op.dy };
           if (![op.dx,op.dy].every(Number.isFinite) || shapes.some(s => !s.parent || s.waypoints) || !rules.allowed('elements.move', { shapes, delta, target })) fail('Movimiento no admitido.');
-          if (op.elementIds) modeling.moveElements(shapes, delta, target); else modeling.moveShape(e, delta, target);
+          modeling.moveElements(shapes, delta, target);
         } else if (op.type === 'resize') {
           if (![op.x,op.y,op.width,op.height].every(Number.isFinite) || op.width < 20 || op.height < 20 || !rules.allowed('shape.resize', { shape: e })) fail('Tamaño no admitido.');
           modeling.resizeShape(e, { x: op.x, y: op.y, width: op.width, height: op.height },undefined,op.autoResize===false?{autoResize:false}:undefined);

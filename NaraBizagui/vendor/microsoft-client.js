@@ -15385,34 +15385,20 @@
   var MAX_BYTES = 8 * 1024 * 1024;
   var problem = (code, message) => Object.assign(new Error(message), { code });
   var id = (value) => encodeURIComponent(value);
-  function graphUrl(path) {
-    const url = new URL(path, GRAPH);
-    if (url.origin !== "https://graph.microsoft.com" || !url.pathname.startsWith("/v1.0/")) throw problem("INVALID_TARGET", "Destino Microsoft no permitido.");
-    return url.href;
+  var microsoftUrl = (value) => {
+    const url = new URL(value);
+    if (url.protocol !== "https:" || url.username || url.password || url.port || !/(^|\.)(sharepoint\.com|1drv\.com|onedrive\.com|livefilestore\.com|storage\.live\.com)$/.test(url.hostname)) throw problem("INVALID_TARGET", "La direcci\xF3n no pertenece a un servicio Microsoft admitido.");
+    return url;
+  };
+  async function sha256(bytes) {
+    return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)), (b) => b.toString(16).padStart(2, "0")).join("");
   }
-  function bpmnName(value) {
-    const name3 = value.trim();
-    if (!name3 || name3.length > 200 || /[\x00-\x1f"*:<>?\\/|]/.test(name3) || /[ .]$/.test(name3)) throw problem("INVALID_NAME", "Escribe un nombre de archivo v\xE1lido, sin rutas.");
-    return /\.bpmn$/i.test(name3) ? name3 : name3 + ".bpmn";
-  }
-  function sharePointPath(value) {
-    let url;
-    try {
-      url = new URL(value);
-    } catch {
-      throw problem("INVALID_SITE", "Escribe la direcci\xF3n HTTPS del sitio de SharePoint.");
-    }
-    if (url.protocol !== "https:" || !/^[a-z0-9-]+\.sharepoint\.com$/i.test(url.hostname) || url.username || url.password || url.port || url.search || url.hash) throw problem("INVALID_SITE", "Usa la direcci\xF3n de un sitio de SharePoint, sin enlaces de uso compartido.");
-    const path = url.pathname.replace(/\/$/, "");
-    if (path && !/^\/(sites|teams)\/[^/]+$/i.test(path)) throw problem("INVALID_SITE", "Usa la direcci\xF3n del sitio, por ejemplo https://empresa.sharepoint.com/sites/Procesos.");
-    return `sites/${url.hostname}:${path || "/"}`;
-  }
-  async function boundedText(response) {
+  async function boundedBytes(response) {
     if (Number(response.headers.get("content-length")) > MAX_BYTES) throw problem("FILE_TOO_LARGE", "El BPMN supera 8 MB.");
     if (!response.body?.getReader) {
-      const text2 = await response.text();
-      if (new TextEncoder().encode(text2).length > MAX_BYTES) throw problem("FILE_TOO_LARGE", "El BPMN supera 8 MB.");
-      return text2;
+      const bytes2 = new Uint8Array(await response.arrayBuffer());
+      if (bytes2.length > MAX_BYTES) throw problem("FILE_TOO_LARGE", "El BPMN supera 8 MB.");
+      return bytes2;
     }
     const reader = response.body.getReader(), chunks = [];
     let length = 0;
@@ -15436,7 +15422,29 @@
       bytes.set(chunk, offset);
       offset += chunk.length;
     }
-    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+    return bytes;
+  }
+  function graphUrl(path) {
+    const url = new URL(path, GRAPH);
+    if (url.origin !== "https://graph.microsoft.com" || !url.pathname.startsWith("/v1.0/")) throw problem("INVALID_TARGET", "Destino Microsoft no permitido.");
+    return url.href;
+  }
+  function bpmnName(value) {
+    const name3 = value.trim();
+    if (!name3 || name3.length > 200 || /[\x00-\x1f"*:<>?\\/|]/.test(name3) || /[ .]$/.test(name3)) throw problem("INVALID_NAME", "Escribe un nombre de archivo v\xE1lido, sin rutas.");
+    return /\.bpmn$/i.test(name3) ? name3 : name3 + ".bpmn";
+  }
+  function sharePointPath(value) {
+    let url;
+    try {
+      url = new URL(value);
+    } catch {
+      throw problem("INVALID_SITE", "Escribe la direcci\xF3n HTTPS del sitio de SharePoint.");
+    }
+    if (url.protocol !== "https:" || !/^[a-z0-9-]+\.sharepoint\.com$/i.test(url.hostname) || url.username || url.password || url.port || url.search || url.hash) throw problem("INVALID_SITE", "Usa la direcci\xF3n de un sitio de SharePoint, sin enlaces de uso compartido.");
+    const path = url.pathname.replace(/\/$/, "");
+    if (path && !/^\/(sites|teams)\/[^/]+$/i.test(path)) throw problem("INVALID_SITE", "Usa la direcci\xF3n del sitio, por ejemplo https://empresa.sharepoint.com/sites/Procesos.");
+    return `sites/${url.hostname}:${path || "/"}`;
   }
   var MicrosoftFiles = class {
     constructor(auth, fetcher = (...args) => fetch(...args)) {
@@ -15452,16 +15460,23 @@
       if (this.accountId() !== expected) throw problem("ACCOUNT_CHANGED", "La cuenta Microsoft cambi\xF3. Abre de nuevo el archivo con la cuenta correspondiente.");
     }
     async request(path, options = {}, scopes = FILE_SCOPES, expected = this.accountId()) {
+      const { beforeSend, ...fetchOptions } = options;
       this.assertAccount(expected);
       const token = await this.auth.token(scopes, false);
       this.assertAccount(expected);
+      beforeSend?.();
       let response;
       try {
-        response = await this.fetcher(graphUrl(path), { cache: "no-store", credentials: "omit", referrerPolicy: "no-referrer", ...options, headers: { ...options.headers, Authorization: "Bearer " + token } });
+        response = await this.fetcher(graphUrl(path), { cache: "no-store", credentials: "omit", referrerPolicy: "no-referrer", ...fetchOptions, headers: { ...options.headers, Authorization: "Bearer " + token } });
       } catch {
         throw problem(options.method && options.method !== "GET" ? "SAVE_UNCERTAIN" : "NETWORK_ERROR", "No se pudo confirmar la respuesta de Microsoft. Conserva tus cambios y vuelve a leer el archivo antes de guardar de nuevo.");
       }
-      this.assertAccount(expected);
+      try {
+        this.assertAccount(expected);
+      } catch (error) {
+        if (options.method && options.method !== "GET") throw problem("SAVE_UNCERTAIN", "La cuenta cambi\xF3 tras enviar la escritura. Conserva el documento y reconcilia el destino original.");
+        throw error;
+      }
       if (response.status === 412 || response.status === 409) throw problem("EXTERNAL_CHANGE", "El archivo cambi\xF3 en Microsoft o el nombre ya existe. Recarga la revisi\xF3n actual o guarda con otro nombre.");
       if (response.status === 401) throw problem("MICROSOFT_CONNECT", "La sesi\xF3n Microsoft venci\xF3. Vuelve a conectar tu cuenta.");
       if (response.status === 403) throw problem("MICROSOFT_PERMISSION", "Microsoft no autoriz\xF3 la operaci\xF3n. Comprueba los permisos del archivo y la autorizaci\xF3n de tu organizaci\xF3n.");
@@ -15470,7 +15485,16 @@
         const retryAfterMs = retry ? /^\d+$/.test(retry) ? Number(retry) * 1e3 : Date.parse(retry) - Date.now() : 6e4;
         throw Object.assign(problem("THROTTLED", "Microsoft pidi\xF3 reducir las consultas. Espera un momento y vuelve a intentar."), { retryAfterMs: Number.isFinite(retryAfterMs) ? Math.max(retryAfterMs, 1e3) : 6e4 });
       }
-      if (!response.ok) throw problem(response.status === 404 ? "FILE_NOT_FOUND" : "MICROSOFT_ERROR", `Microsoft no pudo completar la operaci\xF3n (${response.status}).`);
+      if (!response.ok) {
+        let detail;
+        try {
+          detail = await response.json();
+        } catch {
+        }
+        const graphCode = String(detail?.error?.code || "").replace(/[^a-zA-Z0-9_.-]/g, "").slice(0, 100);
+        const diagnostic = String(detail?.error?.message || "").replace(/https?:\/\/\S+/g, "[URL]").slice(0, 400);
+        throw Object.assign(problem(response.status === 404 ? "FILE_NOT_FOUND" : "MICROSOFT_ERROR", `Microsoft no pudo completar la operaci\xF3n (${response.status}${graphCode ? ": " + graphCode : ""}).${diagnostic ? " " + diagnostic : ""}`), { httpStatus: response.status, graphCode });
+      }
       return response.status === 204 ? null : response.json();
     }
     async root(driveId) {
@@ -15493,6 +15517,45 @@
       const item = await this.request(`drives/${id(folder.driveId)}/items/${id(folder.id)}?$select=id,name,folder,root,parentReference`);
       if (!item.folder || !item.id || !item.name) throw problem("INVALID_TARGET", "Microsoft no devolvi\xF3 una carpeta disponible.");
       return item;
+    }
+    metadata(driveId, itemId) {
+      return this.request(`drives/${id(driveId)}/${itemId === "root" ? "root" : "items/" + id(itemId)}`);
+    }
+    site(siteUrl) {
+      return this.request(sharePointPath(siteUrl) + "?$select=id,displayName,webUrl", {}, SITE_SCOPES);
+    }
+    libraries(siteId) {
+      return this.request(`sites/${id(siteId)}/drives?$select=id,name,webUrl&$top=100`, {}, SITE_SCOPES);
+    }
+    async shared(sharingUrl) {
+      const url = new URL(sharingUrl);
+      if (!["onedrive.live.com", "1drv.ms"].includes(url.hostname)) microsoftUrl(sharingUrl);
+      else if (url.protocol !== "https:" || url.username || url.password || url.port) throw problem("INVALID_TARGET", "Enlace Microsoft inv\xE1lido.");
+      const token = "u!" + btoa(String.fromCharCode(...new TextEncoder().encode(url.href))).replaceAll("+", "-").replaceAll("/", "_").replace(/=+$/, "");
+      return this.request(`shares/${token}/driveItem`);
+    }
+    // Use the existing small-file Graph route, with server-side fail-on-conflict.
+    // No check-then-replace or automatic rename fallback is permitted.
+    async createExclusive(folder, name3, xml, { beforeWrite = () => {
+    }, onCreated = () => {
+    } } = {}) {
+      name3 = bpmnName(name3);
+      const bytes = new TextEncoder().encode(xml), accountId = this.accountId();
+      if (bytes.length > MAX_BYTES) throw problem("FILE_TOO_LARGE", "El BPMN supera 8 MB.");
+      beforeWrite();
+      let item;
+      try {
+        item = await this.request(`drives/${id(folder.driveId)}/items/${id(folder.id)}:/${id(name3)}:/content?@microsoft.graph.conflictBehavior=fail`, { method: "PUT", headers: { "Content-Type": "application/xml; charset=utf-8", "If-None-Match": "*" }, body: xml, beforeSend: beforeWrite }, FILE_SCOPES, accountId);
+      } catch (error) {
+        if (error.code === "EXTERNAL_CHANGE") error.code = "NAME_ALREADY_EXISTS";
+        throw error;
+      }
+      const handle = new MicrosoftFileHandle(this, { ...item, driveId: folder.driveId }, accountId);
+      onCreated(handle);
+      this.assertAccount(accountId);
+      const source = await handle.verifiedSource();
+      if (source.remote.sha256 !== await sha256(bytes)) throw problem("SAVE_NOT_VERIFIED", "Los bytes remotos difieren del documento enviado.");
+      return source;
     }
     async siteDrives(siteUrl, { authorize = false } = {}) {
       const path = sharePointPath(siteUrl);
@@ -15526,6 +15589,7 @@
       this.driveId = item.driveId;
       this.accountId = accountId;
       this.name = item.name;
+      this.generation = store.auth.generation;
       this.kind = "file";
       this.storageKind = "microsoft";
       this.etag = null;
@@ -15534,6 +15598,10 @@
     }
     endpoint() {
       return `drives/${id(this.driveId)}/items/${id(this.itemId)}`;
+    }
+    assertCurrent() {
+      this.store.assertAccount(this.accountId);
+      if (this.generation !== this.store.auth.generation) throw problem("ACCOUNT_CHANGED", "La generaci\xF3n Microsoft cambi\xF3. Reabre el archivo con la cuenta activa.");
     }
     async queryPermission() {
       return this.store.auth.account?.homeAccountId === this.accountId ? "granted" : "prompt";
@@ -15553,29 +15621,51 @@
       return other?.storageKind === "microsoft" && this.accountId === other.accountId && this.driveId === other.driveId && this.itemId === other.itemId;
     }
     async getFile({ ifChangedSince = null } = {}) {
-      this.store.assertAccount(this.accountId);
+      this.assertCurrent();
       const meta = await this.store.request(this.endpoint(), {}, FILE_SCOPES, this.accountId);
+      this.assertCurrent();
       if (!meta.eTag || !meta.file) throw problem("INVALID_TARGET", "Microsoft no devolvi\xF3 un archivo con revisi\xF3n.");
       if (meta.size > MAX_BYTES) throw problem("FILE_TOO_LARGE", "El BPMN supera 8 MB.");
       if (ifChangedSince && ifChangedSince === meta.eTag) return null;
       if (this.cache === null || this.etag !== meta.eTag) {
         if (!meta["@microsoft.graph.downloadUrl"]) throw problem("DOWNLOAD_UNAVAILABLE", "Microsoft no devolvi\xF3 un enlace de descarga. Vuelve a abrir el archivo.");
-        const url = new URL(meta["@microsoft.graph.downloadUrl"]);
-        if (url.protocol !== "https:" || !/(^|\.)(sharepoint\.com|1drv\.com|onedrive\.com|livefilestore\.com|storage\.live\.com)$/.test(url.hostname)) throw problem("INVALID_TARGET", "La direcci\xF3n de descarga no pertenece a un servicio Microsoft admitido.");
+        const url = microsoftUrl(meta["@microsoft.graph.downloadUrl"]);
         const response = await this.store.fetcher(url.href, { credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer" });
         if (!response.ok) throw problem("DOWNLOAD_ERROR", "No se pudo descargar el BPMN de Microsoft.");
-        const text2 = await boundedText(response);
-        this.store.assertAccount(this.accountId);
+        const bytes = await boundedBytes(response);
+        if (bytes.length !== meta.size) throw problem("SAVE_NOT_VERIFIED", "El tama\xF1o descargado no coincide con Microsoft.");
+        let text2;
+        try {
+          text2 = new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }).decode(bytes);
+        } catch {
+          throw problem("INVALID_ENCODING", "El BPMN no contiene texto UTF-8 v\xE1lido.");
+        }
+        this.assertCurrent();
+        const after = await this.store.request(this.endpoint(), {}, FILE_SCOPES, this.accountId);
+        this.assertCurrent();
+        if (after.eTag !== meta.eTag || after.id !== meta.id || after.size !== meta.size) throw problem("EXTERNAL_CHANGE", "El archivo cambi\xF3 durante la descarga. Conserva el documento actual.");
+        this.verified = { sha256: await sha256(bytes), eTag: meta.eTag, size: bytes.length, verifiedAt: (/* @__PURE__ */ new Date()).toISOString() };
         this.cache = text2;
       }
       this.etag = meta.eTag;
       this.name = meta.name;
-      this.parent = meta.parentReference ? { id: meta.parentReference.id, name: meta.parentReference.name } : null;
+      this.metadata = meta;
+      this.parent = meta.parentReference ? { ...meta.parentReference } : null;
       const snapshot = this.cache;
       return { name: meta.name, size: meta.size, text: async () => snapshot };
     }
+    remoteInfo() {
+      const meta = this.metadata, proof = this.verified;
+      if (!meta || !proof || proof.eTag !== this.etag) return null;
+      return { driveId: this.driveId, itemId: this.itemId, parentItemId: meta.parentReference?.id || null, siteId: meta.parentReference?.siteId || null, name: this.name, webUrl: meta.webUrl || null, ...proof };
+    }
+    async verifiedSource() {
+      this.cache = null;
+      const file = await this.getFile();
+      return { handle: this, name: file.name, xml: await file.text(), remote: this.remoteInfo() };
+    }
     async createWritable() {
-      this.store.assertAccount(this.accountId);
+      this.assertCurrent();
       if (this.uncertain) throw problem("SAVE_UNCERTAIN", "Hay un guardado sin confirmar. Recarga el archivo de Microsoft antes de volver a guardar.");
       const expected = this.etag;
       if (!expected) throw problem("NO_BASE_REVISION", "Vuelve a abrir el archivo antes de guardar.");
@@ -15593,7 +15683,7 @@
         close: async () => {
           if (aborted || content === void 0) throw problem("ABORTED", "No hay contenido para guardar.");
           try {
-            await this.store.request(this.endpoint() + "/content", { method: "PUT", headers: { "Content-Type": "application/xml; charset=utf-8", "If-Match": expected }, body: content }, FILE_SCOPES, this.accountId);
+            await this.store.request(this.endpoint() + "/content", { method: "PUT", headers: { "Content-Type": "application/xml; charset=utf-8", "If-Match": expected }, body: content, beforeSend: () => this.assertCurrent() }, FILE_SCOPES, this.accountId);
             this.cache = null;
             if (await (await this.getFile()).text() !== content) throw problem("SAVE_NOT_VERIFIED", "El archivo de Microsoft no coincide con la revisi\xF3n enviada.");
           } catch (error) {
@@ -15952,9 +16042,372 @@
     }
   };
 
+  // microsoft-lifecycle.js
+  var MICROSOFT_FILES_CONTRACT = "microsoft-files-v1";
+  var MICROSOFT_FILE_CAPABILITIES = Object.freeze({ contract: MICROSOFT_FILES_CONTRACT, resolve: true, list: true, create: true, open: true, attach: true, autoSave: true, receipts: true });
+  var stable = (value) => JSON.stringify(value, (_, v) => v && typeof v === "object" && !Array.isArray(v) ? Object.fromEntries(Object.keys(v).sort().map((k) => [k, v[k]])) : v);
+  var clone = (value) => JSON.parse(JSON.stringify(value));
+  var pause = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+  var errorFields = ["code", "phase", "requestId", "retryable", "retryAfterMs", "recovery", "created", "verified", "attached", "remote", "currentSaved", "currentSavedRemote"];
+  var receiptError = (error) => Object.fromEntries(errorFields.filter((k) => error[k] !== void 0).map((k) => [k, error[k]]));
+  var identity3 = (stamp) => stable(stamp);
+  var MicrosoftFileLifecycle = class {
+    constructor({ auth, files, workspace, editor, now = Date.now }) {
+      Object.assign(this, { auth, files, workspace, editor, now });
+      this.generation = crypto.randomUUID();
+      this.refs = /* @__PURE__ */ new Map();
+      this.receipts = /* @__PURE__ */ new Map();
+      this.active = null;
+      this.capabilities = MICROSOFT_FILE_CAPABILITIES;
+    }
+    identity() {
+      if (!this.auth.account) throw problem("MICROSOFT_CONNECT", "Conecta Microsoft en el editor. El v\xEDnculo MCP es independiente.");
+      const stamp = this.workspace.stamp(), key = identity3(stamp);
+      if (key !== this.identityKey) {
+        this.identityKey = key;
+        this.accountRef = crypto.randomUUID();
+        this.refs.clear();
+      }
+      return { stamp, accountRef: this.accountRef, tenantId: this.auth.account.tenantId };
+    }
+    account(args) {
+      const current = this.identity();
+      if (args.accountRef !== current.accountRef) throw problem("ACCOUNT_CHANGED", "La cuenta o su generaci\xF3n cambi\xF3. Lee el estado y resuelve otra vez.");
+      if (args.expectedTenantId !== current.tenantId) throw problem("TENANT_MISMATCH", "El tenant activo no coincide con el solicitado. No se seleccion\xF3 otra cuenta.");
+      return current;
+    }
+    put(value, sessionId, scopeRef = null) {
+      if (this.refs.size >= 512) throw problem("REFERENCE_LIMIT", "Resuelve de nuevo en una sesi\xF3n de trabajo m\xE1s corta.");
+      const key = crypto.randomUUID();
+      this.refs.set(key, { ...value, sessionId, scopeRef, stamp: this.workspace.stamp(), expires: this.now() + 15 * 60 * 1e3 });
+      return key;
+    }
+    ref(key, sessionId, kind) {
+      const ref = this.refs.get(key);
+      if (!ref || ref.expires < this.now() || ref.sessionId !== sessionId) throw problem("OUT_OF_SCOPE", "La referencia no pertenece a esta sesi\xF3n o venci\xF3. Resuelve el destino otra vez.");
+      this.workspace.assert(ref.stamp);
+      if (kind && ref.kind !== kind) throw problem("INVALID_TARGET", "La referencia no tiene el tipo requerido.");
+      return ref;
+    }
+    scope(args, action = "read") {
+      this.account(args);
+      const scope = this.ref(args.scopeRef, args.sessionId, "scope");
+      if (!scope.actions.includes(action)) throw problem("OUT_OF_SCOPE", "La acci\xF3n no est\xE1 incluida en el alcance expl\xEDcito.");
+      return scope;
+    }
+    expose(item, driveId, scopeRef, sessionId, siteId = null) {
+      if (item.remoteItem) throw problem("OUT_OF_SCOPE", "El acceso directo apunta a otro recurso. Resuelve sus IDs expl\xEDcitamente.");
+      const kind = item.folder || item.itemId === "root" ? "folder" : item.file && /\.bpmn$/i.test(item.name) ? "file" : null;
+      if (!kind || !item.id && !item.itemId) throw problem("INVALID_TARGET", "Selecciona una carpeta o un archivo BPMN.");
+      const value = { kind, driveId, itemId: item.id || item.itemId, siteId: item.parentReference?.siteId || siteId, name: item.name, webUrl: item.webUrl || null, eTag: item.eTag || null, size: item.size ?? null };
+      const key = this.put(value, sessionId, scopeRef);
+      return { ...value, [kind === "folder" ? "folderRef" : "fileRef"]: key };
+    }
+    async checked(args, reference3, action, kind) {
+      const scope = this.scope(args, action), ref = this.ref(reference3, args.sessionId, kind);
+      if (ref.scopeRef !== args.scopeRef) throw problem("OUT_OF_SCOPE", "La referencia pertenece a otro alcance.");
+      const item = await this.files.metadata(ref.driveId, ref.itemId);
+      this.workspace.assert(scope.stamp);
+      if (item.remoteItem) throw problem("OUT_OF_SCOPE", "No se siguen accesos directos fuera del recurso autorizado.");
+      if (kind === "folder" && !item.folder || kind === "file" && (!item.file || !/\.bpmn$/i.test(item.name))) throw problem("INVALID_TARGET", "El recurso cambi\xF3 de tipo.");
+      const resourceTenant = item.sharepointIds?.tenantId || item.parentReference?.sharepointIds?.tenantId;
+      if (resourceTenant && resourceTenant !== this.auth.account.tenantId) throw problem("TENANT_MISMATCH", "El recurso pertenece a otro tenant. Selecci\xF3n expl\xEDcita requerida.");
+      if (scope.rootKind === "site") {
+        if (!scope.drives.includes(ref.driveId)) throw problem("OUT_OF_SCOPE", "La biblioteca no pertenece al sitio resuelto.");
+      } else if (scope.rootKind === "file") {
+        if (ref.driveId !== scope.driveId || item.id !== scope.itemId) throw problem("OUT_OF_SCOPE", "El archivo no coincide con el autorizado.");
+      } else {
+        if (ref.driveId !== scope.driveId) throw problem("OUT_OF_SCOPE", "La biblioteca cambi\xF3.");
+        let ancestor = item, depth = 0;
+        const seen = /* @__PURE__ */ new Set();
+        while (ancestor.id !== scope.itemId) {
+          const parent = ancestor.parentReference;
+          if (!parent?.id || parent.driveId && parent.driveId !== scope.driveId || seen.has(parent.id) || ++depth > 64) throw problem("OUT_OF_SCOPE", "El recurso ya no est\xE1 dentro de la carpeta autorizada.");
+          seen.add(parent.id);
+          ancestor = await this.files.metadata(scope.driveId, parent.id);
+          this.workspace.assert(scope.stamp);
+        }
+      }
+      return { scope, ref, item };
+    }
+    async status({ sessionId, requestId } = {}) {
+      let microsoft = { state: "disconnected", connected: false };
+      if (this.auth.account) {
+        const { accountRef, tenantId } = this.identity();
+        microsoft = { state: "connected", connected: true, accountRef, tenantId };
+      }
+      const state = this.editor.state(), handle = state.handle;
+      const remote = handle?.storageKind === "microsoft" ? handle.remoteInfo() : null;
+      const targetMatches = Boolean(microsoft.connected && handle?.accountId === this.auth.account?.homeAccountId && handle?.generation === this.auth.generation && remote && remote.driveId === state.target?.driveId && remote.itemId === state.target?.itemId);
+      const unresolved = [...this.receipts.values()].some((r) => r.identityKey === this.identityKey && r.public.phase === "result_unknown");
+      const autoSave = { ...state.autoSave, blocked: state.autoSave.blocked || (state.readOnly ? "FILE_READ_ONLY" : null) || (unresolved ? "RESULT_UNKNOWN" : null), targetMatches, effective: Boolean(state.autoSave.enabled && targetMatches && !state.readOnly && !state.autoSave.blocked && !unresolved && !state.unappliedProperties && !state.recoveryRequired && !this.active), lastVerifiedRevision: !state.dirty && targetMatches ? state.revision : null, lastVerifiedETag: remote?.eTag || null };
+      let receipt;
+      if (requestId) {
+        const entry = this.receipts.get(requestId);
+        if (entry && entry.identityKey === this.identityKey && entry.sessionId === sessionId) receipt = clone(entry.public);
+        else receipt = { requestId, phase: "result_unknown", code: "OPERATION_RECEIPT_EXPIRED", recovery: "read_exact_destination", retryable: false };
+      }
+      return { contract: MICROSOFT_FILES_CONTRACT, operationGeneration: this.generation, sessionId, microsoft, connection: state.connection, readiness: state.readiness, document: { documentId: state.documentId, revision: state.revision, savedRevision: !state.dirty && targetMatches ? state.revision : null, dirty: state.dirty, unappliedProperties: state.unappliedProperties, target: state.target, state: state.recoveryRequired ? "recovery_required" : this.active ? "saving" : state.unappliedProperties ? "draft_pending" : state.dirty ? "dirty" : targetMatches ? "remote_ready" : state.target ? "local_ready" : "no_destination" }, remote, autoSave, ...receipt ? { receipt } : {} };
+    }
+    async resolve(args) {
+      const current = this.account(args), target = args.target;
+      let item, driveId, siteId, rootKind, drives = [];
+      if (target.siteUrl || target.siteId) {
+        const site = target.siteUrl ? await this.files.site(target.siteUrl) : await this.files.request(`sites/${encodeURIComponent(target.siteId)}?$select=id,displayName,webUrl`, {}, SITE_SCOPES);
+        this.workspace.assert(current.stamp);
+        siteId = site.id;
+        if (!target.driveId) {
+          if (args.requestedScope !== "site") throw problem("INVALID_TARGET", "El sitio contiene bibliotecas; solicita alcance de sitio para elegir una.");
+          rootKind = "site";
+          item = { id: site.id, name: site.displayName, webUrl: site.webUrl };
+        } else {
+          let page = await this.files.libraries(siteId), count = 0;
+          for (; ; ) {
+            this.workspace.assert(current.stamp);
+            drives.push(...page.value.map((d) => d.id));
+            if (!page["@odata.nextLink"]) break;
+            if (++count > 20) throw problem("INVALID_TARGET", "Demasiadas bibliotecas; resuelve un destino m\xE1s concreto.");
+            page = await this.page(page["@odata.nextLink"], `sites/${encodeURIComponent(siteId)}/drives`, SITE_SCOPES);
+          }
+          if (!drives.includes(target.driveId)) throw problem("OUT_OF_SCOPE", "La biblioteca no pertenece al sitio especificado.");
+          driveId = target.driveId;
+          item = await this.files.metadata(driveId, target.itemId || "root");
+        }
+      } else if (target.sharingUrl) {
+        item = await this.files.shared(target.sharingUrl);
+        driveId = item.parentReference?.driveId;
+      } else {
+        driveId = target.driveId;
+        item = await this.files.metadata(driveId, target.itemId);
+      }
+      this.workspace.assert(current.stamp);
+      if (item.remoteItem) throw problem("OUT_OF_SCOPE", "El acceso directo requiere resolver el recurso de destino expl\xEDcito.");
+      if (!rootKind) rootKind = item.folder ? "folder" : item.file && /\.bpmn$/i.test(item.name) ? "file" : null;
+      if (!rootKind || rootKind !== args.requestedScope || rootKind !== "site" && !driveId) throw problem("INVALID_TARGET", "El enlace/ID no coincide con el tipo de alcance solicitado.");
+      const resourceTenant = item.sharepointIds?.tenantId;
+      if (resourceTenant && resourceTenant !== current.tenantId) throw problem("TENANT_MISMATCH", "El recurso no corresponde al tenant activo.");
+      const scopeRef = this.put({ kind: "scope", rootKind, driveId, itemId: item.id, siteId: siteId || item.parentReference?.siteId || null, actions: args.actions, drives }, args.sessionId);
+      const result = rootKind === "site" ? { kind: "site", siteId, name: item.name, webUrl: item.webUrl } : this.expose(item, driveId, scopeRef, args.sessionId, siteId);
+      return { contract: MICROSOFT_FILES_CONTRACT, scopeRef, ...result, accountRef: current.accountRef, tenantId: current.tenantId, actions: args.actions };
+    }
+    async page(nextLink, endpoint, scopes = FILE_SCOPES) {
+      const url = new URL(graphUrl(nextLink)), base = new URL(graphUrl(endpoint));
+      if (url.pathname !== base.pathname) throw problem("OUT_OF_SCOPE", "La p\xE1gina no corresponde a la colecci\xF3n autorizada.");
+      return this.files.request(url.href, {}, scopes);
+    }
+    async list(args) {
+      const scope = this.scope(args);
+      let endpoint, page, folder, scopes = FILE_SCOPES;
+      if (args.kind === "libraries") {
+        if (scope.rootKind !== "site") throw problem("OUT_OF_SCOPE", "Listar bibliotecas requiere alcance expl\xEDcito de sitio.");
+        endpoint = `sites/${encodeURIComponent(scope.siteId)}/drives`;
+        scopes = SITE_SCOPES;
+      } else {
+        folder = await this.checked(args, args.folderRef, "read", "folder");
+        endpoint = `drives/${encodeURIComponent(folder.ref.driveId)}/items/${encodeURIComponent(folder.item.id)}/children`;
+      }
+      if (args.cursor) {
+        const cursor = this.ref(args.cursor, args.sessionId, "cursor");
+        if (cursor.scopeRef !== args.scopeRef || cursor.endpoint !== endpoint || cursor.pageSize !== args.pageSize) throw problem("OUT_OF_SCOPE", "El cursor no corresponde a esta consulta.");
+        page = await this.page(cursor.nextLink, endpoint, scopes);
+      } else page = await this.files.request(`${endpoint}?$top=${args.pageSize}`, {}, scopes);
+      this.workspace.assert(scope.stamp);
+      const entries = [];
+      for (const item of page.value || []) {
+        if (args.kind === "libraries") {
+          if (!scope.drives.includes(item.id)) scope.drives.push(item.id);
+          entries.push({ ...this.expose({ id: "root", folder: {}, name: item.name, webUrl: item.webUrl }, item.id, args.scopeRef, args.sessionId, scope.siteId), kind: "library" });
+        } else if (!item.remoteItem && (item.folder || item.file && /\.bpmn$/i.test(item.name))) entries.push(this.expose(item, folder.ref.driveId, args.scopeRef, args.sessionId, scope.siteId));
+      }
+      const nextLink = page["@odata.nextLink"];
+      if (nextLink) {
+        const url = new URL(graphUrl(nextLink));
+        if (url.pathname !== new URL(graphUrl(endpoint)).pathname) throw problem("OUT_OF_SCOPE", "Microsoft devolvi\xF3 una p\xE1gina fuera de alcance.");
+      }
+      return { contract: MICROSOFT_FILES_CONTRACT, entries, complete: !nextLink, nextCursor: nextLink ? this.put({ kind: "cursor", endpoint, nextLink, pageSize: args.pageSize }, args.sessionId, args.scopeRef) : null };
+    }
+    check(args) {
+      const state = this.editor.state();
+      if (state.revision !== args.expectedRevision) throw problem("REVISION_CONFLICT", "El diagrama cambi\xF3; lee la nueva revisi\xF3n.");
+      if (state.documentId !== args.expectedDocumentId || stable(state.target) !== stable(args.expectedTarget)) throw problem("FILE_CHANGED", "Cambi\xF3 el documento o destino actual.");
+      if (state.unappliedProperties) throw problem("FORM_PENDING", "Aplica o cancela la edici\xF3n pendiente por decisi\xF3n del usuario.");
+      if (state.uncertain) throw problem("SAVE_UNCERTAIN", "Hay un guardado incierto. Reconcilia antes de cambiar el destino.");
+      return state;
+    }
+    async run(action, args, perform) {
+      this.account(args);
+      if (args.operationGeneration !== this.generation) throw problem("OPERATION_RECEIPT_EXPIRED", "Cambi\xF3 la generaci\xF3n del editor. Consulta el destino exacto antes de repetir.");
+      const fingerprint = stable({ action, ...args }), previous = this.receipts.get(args.requestId);
+      if (previous) {
+        if (previous.fingerprint !== fingerprint) throw problem("REQUEST_ID_REUSED", "El identificador pertenece a otros argumentos.");
+        if (previous.public.error) throw Object.assign(problem(previous.public.error.code, previous.public.message), previous.public.error);
+        return { ...clone(previous.public), replayed: true, current: await this.status(args) };
+      }
+      this.scope(args, action);
+      if (["create", "autosave"].includes(action) && [...this.receipts.values()].some((r) => r.identityKey === this.identityKey && r.public.phase === "result_unknown")) throw problem("RESULT_UNKNOWN", "Hay una escritura sin reconciliar. Consulta su recibo y el destino exacto antes de otra escritura.");
+      if (this.active) throw problem("BUSY", "Espera el resultado de la operaci\xF3n actual.");
+      await this.editor.prepare(args.expectedRevision);
+      this.check(args);
+      if (this.receipts.size >= 64) throw problem("REFERENCE_LIMIT", "Se alcanz\xF3 el l\xEDmite de recibos de esta pesta\xF1a. Conserva los resultados antes de iniciar otra sesi\xF3n.");
+      const record = { fingerprint, identityKey: this.identityKey, sessionId: args.sessionId, public: { requestId: args.requestId, phase: "prepared", created: false, verified: false, attached: false } };
+      if (!args.dryRun) this.receipts.set(args.requestId, record);
+      this.active = record;
+      const stamp = this.workspace.stamp();
+      let release;
+      const guard = () => {
+        this.workspace.assert(stamp);
+        return this.check(args);
+      };
+      guard.identity = () => this.workspace.assert(stamp);
+      try {
+        release = this.editor.lock();
+        const result = await perform(record.public, guard);
+        record.public = { ...record.public, ...result, requestId: args.requestId, applied: !args.dryRun && !result.reconciliationRequired, phase: result.phase || "completed", ...args.dryRun ? { dryRun: true, phase: "prepared" } : {} };
+      } catch (error) {
+        const unknown = ["SAVE_UNCERTAIN", "SAVE_NOT_VERIFIED", "RESULT_UNKNOWN"].includes(error.code) || record.public.created && !record.public.verified;
+        if (unknown) this.editor.enableAutoSave(false);
+        Object.assign(error, { requestId: args.requestId, phase: unknown ? "result_unknown" : record.public.verified ? "verified_unattached" : "failed", created: record.public.created, verified: record.public.verified, attached: record.public.attached, ...record.public.remote ? { remote: record.public.remote } : {}, ...record.public.currentSaved ? { currentSaved: true, currentSavedRemote: record.public.currentSavedRemote } : {}, retryable: false, recovery: unknown ? "read_receipt_and_exact_destination" : "read_and_replan" });
+        record.public = { ...record.public, ...receiptError(error), message: error.message, error: receiptError(error) };
+        throw error;
+      } finally {
+        release?.();
+        this.active = null;
+      }
+      const deadline = this.now() + (args.waitForSavedMs || 0);
+      while (this.now() < deadline) {
+        const s = this.editor.state();
+        if (!s.dirty && !s.autoSave.running || s.autoSave.blocked) break;
+        await pause(50);
+      }
+      const current = await this.status({ sessionId: args.sessionId });
+      record.public = { ...record.public, ...current, remote: record.public.remote || current.remote };
+      return clone(record.public);
+    }
+    complete(source) {
+      const r = source.remote;
+      if (!r?.driveId || !r.itemId || !r.parentItemId || !r.webUrl || !r.eTag || !r.sha256) throw problem("SAVE_NOT_VERIFIED", "Faltan identificadores o prueba de persistencia remota.");
+      return r;
+    }
+    create(args) {
+      return this.run("create", args, async (record, guard) => {
+        if (args.attach) {
+          this.scope(args, "attach");
+          this.scope(args, "autosave");
+        } else if (args.autoSave) throw problem("INVALID_TARGET", "Activar autoguardado requiere asociar el archivo.");
+        const { ref, item } = await this.checked(args, args.folderRef, "create", "folder");
+        guard();
+        const source = await this.editor.snapshot();
+        guard();
+        const name3 = bpmnName(args.name);
+        if (args.dryRun) return { destination: { driveId: ref.driveId, parentItemId: item.id, name: name3 }, editorSha256: await sha256(new TextEncoder().encode(source.xml)) };
+        record.phase = "writing";
+        record.destination = { driveId: ref.driveId, parentItemId: item.id, name: name3 };
+        record.sourceSha256 = await sha256(new TextEncoder().encode(source.xml));
+        let saved;
+        try {
+          saved = await this.files.createExclusive({ driveId: ref.driveId, id: item.id }, name3, source.xml, { beforeWrite: guard, onCreated: (handle) => {
+            record.created = true;
+            record.phase = "created_unverified";
+            record.remote = { driveId: handle.driveId, itemId: handle.itemId, parentItemId: item.id, name: name3 };
+          } });
+        } catch (error) {
+          if (error.code === "EXTERNAL_CHANGE" && !record.created) error.code = "NAME_ALREADY_EXISTS";
+          throw error;
+        }
+        record.remote = this.complete(saved);
+        record.verified = true;
+        record.phase = "verified_unattached";
+        const file = this.expose({ ...saved.handle.metadata, file: {} }, ref.driveId, args.scopeRef, args.sessionId, ref.siteId);
+        if (!args.attach) return { ...record, fileRef: file.fileRef };
+        try {
+          guard();
+        } catch (error) {
+          if (["REVISION_CONFLICT", "FILE_CHANGED"].includes(error.code)) return { ...record, fileRef: file.fileRef, code: error.code, reconciliationRequired: true, recovery: "read_then_attach", phase: "verified_unattached" };
+          throw error;
+        }
+        await this.editor.attach(saved, guard, args.autoSave);
+        record.attached = true;
+        this.workspace.rememberFile(saved.handle, { provider: ref.siteId ? "sharepoint" : "onedrive" });
+        return { ...record, fileRef: file.fileRef, phase: "completed" };
+      });
+    }
+    open(args) {
+      return this.run("open", args, async (record, guard) => {
+        this.scope(args, "autosave");
+        const current = guard();
+        const { ref, item } = await this.checked(args, args.fileRef, "open", "file");
+        guard();
+        if (item.eTag !== args.expectedETag) throw problem("EXTERNAL_CHANGE", "El archivo cambi\xF3 desde la selecci\xF3n.");
+        let expectedETag = args.expectedETag;
+        if (current.dirty) {
+          if (args.currentPolicy !== "save_current" || !current.target) throw problem("DIRTY_DOCUMENT", "Conserva primero el documento actual en un destino autorizado.");
+          if (args.dryRun) throw problem("DIRTY_DOCUMENT", "El dry-run no guarda el documento actual.");
+          await this.editor.saveCurrent(args.expectedRevision, guard);
+          guard();
+          const saved = this.editor.state();
+          if (saved.dirty) throw problem("DIRTY_DOCUMENT", "El documento actual sigue sin guardar.");
+          record.currentSaved = true;
+          record.currentSavedRemote = saved.handle?.remoteInfo?.() || null;
+          if (saved.target?.driveId === ref.driveId && saved.target?.itemId === item.id) expectedETag = saved.handle.etag;
+        }
+        const source = await this.files.handle(item, ref.driveId).verifiedSource();
+        guard();
+        if (source.remote.eTag !== expectedETag) throw problem("EXTERNAL_CHANGE", "El archivo cambi\xF3 durante la apertura.");
+        this.complete(source);
+        await this.editor.validateSource(source.xml);
+        guard();
+        if (args.dryRun) return { remote: source.remote };
+        record.remote = source.remote;
+        record.verified = true;
+        record.phase = "attaching";
+        await this.editor.open(source, guard, args.autoSave);
+        record.attached = true;
+        this.workspace.rememberFile(source.handle, { provider: ref.siteId ? "sharepoint" : "onedrive" });
+        return { ...record, phase: "completed" };
+      });
+    }
+    attach(args) {
+      return this.run("attach", args, async (record, guard) => {
+        this.scope(args, "autosave");
+        const { ref, item } = await this.checked(args, args.fileRef, "attach", "file");
+        guard();
+        if (item.eTag !== args.expectedETag) throw problem("EXTERNAL_CHANGE", "El archivo cambi\xF3 desde la selecci\xF3n.");
+        const source = await this.files.handle(item, ref.driveId).verifiedSource();
+        guard();
+        const local = await this.editor.snapshot();
+        guard();
+        if (source.remote.eTag !== args.expectedETag || source.remote.sha256 !== args.expectedRemoteSha256) throw problem("EXTERNAL_CHANGE", "La revisi\xF3n remota ya no coincide.");
+        if (source.remote.sha256 !== await sha256(new TextEncoder().encode(local.xml))) throw problem("CONTENT_MISMATCH", "El archivo remoto difiere del documento actual. No se import\xF3 ni sobrescribi\xF3.");
+        this.complete(source);
+        if (args.dryRun) return { remote: source.remote };
+        record.remote = source.remote;
+        record.verified = true;
+        await this.editor.attach(source, guard, args.autoSave);
+        record.attached = true;
+        this.workspace.rememberFile(source.handle, { provider: ref.siteId ? "sharepoint" : "onedrive" });
+        for (const previous of this.receipts.values()) if (previous.public.phase === "result_unknown" && previous.identityKey === this.identityKey && previous.public.destination?.driveId === ref.driveId && previous.public.destination?.parentItemId === source.remote.parentItemId && previous.public.destination?.name === source.name && previous.public.sourceSha256 === source.remote.sha256) {
+          previous.public.phase = "reconciled";
+          previous.public.recovery = "explicit_existing_file_attached";
+          previous.public.remote = source.remote;
+          delete previous.public.error;
+        }
+        return { ...record, phase: "completed" };
+      });
+    }
+    autosave(args) {
+      return this.run("autosave", args, async (record, guard) => {
+        const { ref, item } = await this.checked(args, args.fileRef, "autosave", "file"), state = guard();
+        if (state.target?.driveId !== ref.driveId || state.target?.itemId !== item.id) throw problem("FILE_CHANGED", "El destino del autoguardado no coincide con el archivo seleccionado.");
+        if (item.eTag !== args.expectedETag) throw problem("EXTERNAL_CHANGE", "El destino remoto cambi\xF3.");
+        if (!args.dryRun) this.editor.enableAutoSave(args.enabled);
+        return { attached: true };
+      });
+    }
+  };
+
   // scripts/microsoft-entry.js
   var clientId = "f6e8c708-7319-4fde-8220-af052e371621";
-  window.NaraMicrosoft = { create() {
+  window.NaraMicrosoft = { FileLifecycle: MicrosoftFileLifecycle, create() {
     const client = new PublicClientApplication({
       auth: { clientId, authority: "https://login.microsoftonline.com/common", redirectUri: new URL("microsoft-auth.html", location.href).href },
       cache: { cacheLocation: "localStorage" },

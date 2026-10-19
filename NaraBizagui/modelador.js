@@ -45,7 +45,7 @@ const modeler = new BpmnJS({
 });
 window.bpmnModeler = modeler;
 const semanticProperties = window.NaraBpmnProperties.mount(modeler, byId('semanticFields'), () => basePropertyDraftPending());
-window.NaraAppVersion = '0.10.1';
+window.NaraAppVersion = '0.11.0';
 window.NaraAppBuild = document.querySelector('meta[name=narabizagui-build]')?.content || 'unknown';
 window.diagramReady = false;
 window.diagramError = null;
@@ -254,7 +254,7 @@ async function startStandalone() {
   status('Abre un BPMN o crea un proceso. Los archivos se manejan en tu equipo.');
 }
 async function newBrowserDiagram(force=false) {
-  if (!force && (!ready || loadingDiagram || saving)) return status('Espera a que termine la operación del archivo.');
+  if (!force && (!ready || loadingDiagram || saving || window.NaraMicrosoftOperation)) return status('Espera a que termine la operación del archivo.');
   if (!force && (dirty||window.NaraPropertyDraftPending?.()) && !confirm('Hay cambios sin guardar. ¿Crear otro diagrama y descartarlos?')) return;
   const version = ++browserDocumentVersion;
   loadingDiagram=true;
@@ -287,7 +287,7 @@ async function acceptBrowserSource(source, canApply = () => true, preserveView =
   return true;
 }
 async function openBrowserFile() {
-  if (!ready || loadingDiagram || saving) return status('Espera a que termine la operación del archivo.');
+  if (!ready || loadingDiagram || saving || window.NaraMicrosoftOperation) return status('Espera a que termine la operación del archivo.');
   browserDocumentVersion++;
   if (!window.showOpenFilePicker) {byId('open').click();return;}
   if ((dirty||window.NaraPropertyDraftPending?.()) && !confirm('Hay cambios sin guardar. ¿Abrir otro archivo y descartarlos?')) return;
@@ -295,7 +295,7 @@ async function openBrowserFile() {
   catch(error){if(error.name!=='AbortError')status(error.message);}
 }
 async function saveBrowserFile(saveAs=false,automatic=false,attempt=0) {
-  if(saving || loadingDiagram || filePolling || window.NaraMicrosoftDialogOpen)return false;
+  if(window.NaraMicrosoftOperation||saving || loadingDiagram || filePolling || window.NaraMicrosoftDialogOpen)return false;
   if(window.NaraPropertyDraftPending?.()){if(automatic)throw Object.assign(new Error('Termina la edición pendiente para guardar.'),{code:'AUTO_DEFERRED'});status('Aplica o cierra la edición pendiente antes de guardar.');return;}
   const originalHandle=browserFiles.handle,version=browserDocumentVersion;
   if(automatic&&!originalHandle)return false;
@@ -384,7 +384,7 @@ async function combineBrowserSource(source,canApply=()=>true){
   }finally{loadingDiagram=false;window.naraAutoSave?.refresh();}
 }
 async function pollBrowserFile() {
-  if(!browserFiles.handle || filePolling || loadingDiagram || saving || !ready || autoSavePointer || modeler.get('directEditing').isActive())return;
+  if(window.NaraMicrosoftOperation || !browserFiles.handle || filePolling || loadingDiagram || saving || !ready || autoSavePointer || modeler.get('directEditing').isActive())return;
   const handle=browserFiles.handle,version=browserDocumentVersion,sequence=editSequence;
   const microsoft=handle.storageKind==='microsoft';
   if(microsoft) {
@@ -886,6 +886,7 @@ eventBus.on('canvas.viewbox.changed', event => {
 });
 eventBus.on('nara.erd.zoom',event=>{const value=Math.round(event.scale*100);byId('zoomValue').textContent=value+' %';byId('zoomRange').value=String(value);});
 document.addEventListener('keydown', event => {
+  if(window.NaraMicrosoftOperation)return;
   if (!(event.ctrlKey || event.metaKey)) return;
   if (event.key.toLowerCase() === 's') { event.preventDefault(); saveBpmn().catch(error => status(error.message)); return; }
   if (['INPUT', 'TEXTAREA'].includes(event.target.tagName)) return;

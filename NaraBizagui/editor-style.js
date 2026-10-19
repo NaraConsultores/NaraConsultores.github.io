@@ -50,7 +50,7 @@
       if(bounds.x===element.x&&bounds.y===element.y&&bounds.width===element.width&&(window.NaraER?.active()||bounds.height===element.height))return;
       if(window.NaraER?.active())window.NaraER.edit({type:'erd_table_update',tableId:element.id,x:bounds.x,y:bounds.y,width:bounds.width});
       else if(rules.allowed('shape.resize',{shape:element,newBounds:bounds}))modeling.resizeShape(element,bounds);
-      else if(bounds.width===element.width&&bounds.height===element.height)modeling.moveShape(element,{x:bounds.x-element.x,y:bounds.y-element.y});
+      else if(bounds.width===element.width&&bounds.height===element.height)modeling.moveElements([element],{x:bounds.x-element.x,y:bounds.y-element.y},element.parent);
       else throw Error('Esta figura conserva su tamaño BPMN; puedes cambiar su posición.');
     }catch(error){if(window.NaraInstantEdit?.applying)throw error;$('status').textContent=error.message;}refresh();};
     eventBus.on(['shape.added','shape.changed','connection.changed'],500,event=>{decorate(event.element);});
