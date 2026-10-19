@@ -1,6 +1,6 @@
 {
   "application": "Gestión de Compras · Casa Pellas",
-  "version": "0.16.68-demo",
-  "data": "REAL_BUSINESS_NAMES_SIMULATED_OPERATIONS",
-  "publication_change": "CHG-20261019-IDS-MUESTRA-PAGES-01"
+  "version": "0.16.69-demo",
+  "data": "AUTHORIZED_AIRTABLE_SAMPLE_18_PLUS_2_PURCHASE_CASES",
+  "publication_change": "CHG-20261019-MUESTRA-AIRTABLE-PAGES-01"
 }
