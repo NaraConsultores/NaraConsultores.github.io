@@ -1,3 +1,5 @@
 # Demo de Gestión de Compras e Importaciones
 
-Versión0.16.69-demo. Muestra autorizada de18 expedientes Airtable y dos casos simulados de Compras, igual a la muestra local. Copia estática con fechas/metas al19/10/2026 y catálogos de apoyo. Cambios sólo en la sesión, reiniciados al recargar. JDE, correo y pagos simulados. Sin conexión en vivo ni adjuntos originales. Aceptación formal del cliente pendiente.
+Versión `0.16.70-demo`. [Abrir demo](https://demo.naraconsultores.com/demo-app-importaciones-cp/).
+
+Muestra publicada autorizada de18 expedientes de Airtable y los mismos dos ejemplos simulados de Compras de la demo local. Fechas y metas del corte de19/10/2026; catálogos de apoyo de los proveedores de la muestra. La carga es una copia estática y no sincroniza Airtable. No incluye adjuntos originales ni maestros Excel. Los cambios permanecen en la sesión del navegador y se reinician al recargar. JDE, Getpay, correo y documentos se simulan; esta demo no conecta con sistemas operativos. Su publicación no constituye aceptación funcional del cliente.
