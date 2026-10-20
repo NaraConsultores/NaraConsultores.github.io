@@ -24,6 +24,7 @@ var NaraModelAudit = (() => {
     BATCH_OPERATIONS: () => BATCH_OPERATIONS,
     BPMN_CREATE_TYPES: () => BPMN_CREATE_TYPES,
     EVENT_KINDS: () => EVENT_KINDS,
+    LANE_BORDER_CLEARANCE: () => LANE_BORDER_CLEARANCE,
     PROTOCOL_VERSION: () => PROTOCOL_VERSION,
     SIDES: () => SIDES,
     TOOL_CONTRACT: () => TOOL_CONTRACT,
@@ -33,6 +34,8 @@ var NaraModelAudit = (() => {
     compareSnapshots: () => compareSnapshots,
     inferAnchor: () => inferAnchor,
     intentionalSharedContact: () => intentionalSharedContact,
+    laneBoundaries: () => laneBoundaries,
+    laneRouteConflicts: () => laneRouteConflicts,
     lineHitsBox: () => lineHitsBox,
     orthogonalizeWaypoints: () => orthogonalizeWaypoints,
     planContainerFit: () => planContainerFit,
@@ -101,11 +104,53 @@ var NaraModelAudit = (() => {
   var boxesOverlap = (a, b) => a.x < b.x + b.width - 0.01 && a.x + a.width > b.x + 0.01 && a.y < b.y + b.height - 0.01 && a.y + a.height > b.y + 0.01;
   var segmentAlongBox = (a, b, box) => same(a.x, b.x) && (same(a.x, box.x) || same(a.x, box.x + box.width)) && Math.min(a.y, b.y) < box.y + box.height - 0.01 && Math.max(a.y, b.y) > box.y + 0.01 || same(a.y, b.y) && (same(a.y, box.y) || same(a.y, box.y + box.height)) && Math.min(a.x, b.x) < box.x + box.width - 0.01 && Math.max(a.x, b.x) > box.x + 0.01;
 
+  // plugins/narabizagui/shared/lane-routing.mjs
+  var LANE_BORDER_CLEARANCE = 16;
+  var rect = (e) => [e.x, e.y, e.width, e.height].every(Number.isFinite) && e.width > 0 && e.height > 0;
+  function laneBoundaries(snapshot) {
+    const lanes = (snapshot.elements || []).filter((e) => e.type === "bpmn:Lane" && e.parentId && rect(e)), borders = [];
+    for (let i = 0; i < lanes.length; i++) for (let j = i + 1; j < lanes.length; j++) {
+      const a = lanes[i], b = lanes[j];
+      if (a.parentId !== b.parentId) continue;
+      for (const axis2 of ["x", "y"]) {
+        const size = axis2 === "x" ? "width" : "height", along = axis2 === "x" ? "y" : "x", span = axis2 === "x" ? "height" : "width";
+        let value;
+        if (same(a[axis2] + a[size], b[axis2])) value = b[axis2];
+        else if (same(b[axis2] + b[size], a[axis2])) value = a[axis2];
+        else continue;
+        const from = Math.max(a[along], b[along]), to = Math.min(a[along] + a[span], b[along] + b[span]);
+        if (to - from > 0.01) borders.push({ axis: axis2, value, from, to, laneIds: [a.id, b.id], parentId: a.parentId });
+      }
+    }
+    return borders;
+  }
+  function segmentNearLaneBorder(a, b, border, clearance = LANE_BORDER_CLEARANCE) {
+    const axis2 = border.axis, along = axis2 === "x" ? "y" : "x";
+    return same(a[axis2], b[axis2]) && Math.abs(a[along] - b[along]) > 0.01 && Math.abs(a[axis2] - border.value) < clearance - 0.01 && Math.min(b[along], a[along]) < border.to - 0.01 && Math.max(b[along], a[along]) > border.from + 0.01;
+  }
+  function pointNearLaneBorder(point, border, clearance = LANE_BORDER_CLEARANCE) {
+    const along = border.axis === "x" ? "y" : "x", outside = Math.max(border.from - point[along], 0, point[along] - border.to);
+    return Math.hypot(point[border.axis] - border.value, outside) < clearance - 0.01;
+  }
+  function laneRouteConflicts(points, borders, clearance = LANE_BORDER_CLEARANCE) {
+    const conflicts = [];
+    for (const border of borders) {
+      const parallelSegments = [], bends = [];
+      for (let i = 1; i < points.length; i++) if (segmentNearLaneBorder(points[i - 1], points[i], border, clearance)) parallelSegments.push(i - 1);
+      for (let i = 1; i < points.length - 1; i++) {
+        const a = points[i - 1], b = points[i], c = points[i + 1], cross2 = (b.x - a.x) * (c.y - b.y) - (b.y - a.y) * (c.x - b.x);
+        if (Math.abs(cross2) > 0.01 && pointNearLaneBorder(b, border, clearance)) bends.push(i);
+      }
+      if (parallelSegments.length || bends.length) conflicts.push({ ...border, clearance, parallelSegments, bends });
+    }
+    return conflicts;
+  }
+
   // plugins/narabizagui/shared/routing.mjs
   var SIDES = ["top", "right", "bottom", "left"];
   var vectors = { top: [0, -1], right: [1, 0], bottom: [0, 1], left: [-1, 0] };
   var fail = (code, message) => Object.assign(Error(message), { code });
-  var rect = (e) => e && [e.x, e.y, e.width, e.height].every(Number.isFinite) && e.width > 0 && e.height > 0;
+  var rect2 = (e) => e && [e.x, e.y, e.width, e.height].every(Number.isFinite) && e.width > 0 && e.height > 0;
   var distance = (a, b) => Math.abs(a.x - b.x) + Math.abs(a.y - b.y);
   var axis = (a, b) => same(a.y, b.y) ? 1 : same(a.x, b.x) ? 2 : 0;
   function simplifyOrthogonal(points) {
@@ -139,11 +184,11 @@ var NaraModelAudit = (() => {
     return simplifyOrthogonal(output);
   }
   function anchorPoint(shape, side, offset = 0.5) {
-    if (!rect(shape) || !SIDES.includes(side) || !Number.isFinite(offset) || offset < 0.05 || offset > 0.95) throw fail("INVALID_ANCHOR", "El anclaje requiere un lado y una posici\xF3n entre 0.05 y 0.95.");
+    if (!rect2(shape) || !SIDES.includes(side) || !Number.isFinite(offset) || offset < 0.05 || offset > 0.95) throw fail("INVALID_ANCHOR", "El anclaje requiere un lado y una posici\xF3n entre 0.05 y 0.95.");
     return side === "top" ? { x: shape.x + shape.width * offset, y: shape.y } : side === "bottom" ? { x: shape.x + shape.width * offset, y: shape.y + shape.height } : side === "left" ? { x: shape.x, y: shape.y + shape.height * offset } : { x: shape.x + shape.width, y: shape.y + shape.height * offset };
   }
   function inferAnchor(shape, point) {
-    if (!rect(shape) || !point) return null;
+    if (!rect2(shape) || !point) return null;
     const candidates = SIDES.map((side2) => ({ side: side2, distance: side2 === "left" ? Math.abs(point.x - shape.x) : side2 === "right" ? Math.abs(point.x - shape.x - shape.width) : side2 === "top" ? Math.abs(point.y - shape.y) : Math.abs(point.y - shape.y - shape.height) })).sort((a, b) => a.distance - b.distance);
     const side = candidates[0].side, offset = ["top", "bottom"].includes(side) ? (point.x - shape.x) / shape.width : (point.y - shape.y) / shape.height;
     return { side, offset: Math.max(0.05, Math.min(0.95, offset)) };
@@ -186,32 +231,33 @@ var NaraModelAudit = (() => {
   };
   function routeOrthogonal(snapshot, options) {
     const elements = snapshot.elements || [], index = new Map(elements.map((e) => [e.id, e])), connection = index.get(options.elementId), source = index.get(connection?.sourceId), target = index.get(connection?.targetId);
-    if (!connection || !rect(source) || !rect(target)) throw fail("ROUTE_GEOMETRY_MISSING", "La conexi\xF3n necesita extremos y l\xEDmites completos en la hoja activa.");
+    if (!connection || !rect2(source) || !rect2(target)) throw fail("ROUTE_GEOMETRY_MISSING", "La conexi\xF3n necesita extremos y l\xEDmites completos en la hoja activa.");
     if (source.id === target.id) throw fail("ROUTE_SELF_LOOP", "Conserva el recorrido manual de un bucle que vuelve a la misma figura.");
     const saved = connection.routing || {}, sourceSide = options.sourceSide ?? (anchorPolicy(saved, "source") === "auto" ? "auto" : saved.source?.side) ?? "auto", targetSide = options.targetSide ?? (anchorPolicy(saved, "target") === "auto" ? "auto" : saved.target?.side) ?? "auto";
     if (![...SIDES, "auto"].includes(sourceSide) || ![...SIDES, "auto"].includes(targetSide)) throw fail("INVALID_ANCHOR", "Selecciona arriba, derecha, abajo, izquierda o autom\xE1tico.");
     const sourceOffset = options.sourceOffset ?? saved.source?.offset ?? 0.5, targetOffset = options.targetOffset ?? saved.target?.offset ?? 0.5, clearance = options.clearance ?? 10;
     if (!Number.isFinite(clearance) || clearance < 2 || clearance > 40) throw fail("INVALID_ROUTE", "La separaci\xF3n debe estar entre 2 y 40.");
     const area = { x: Math.min(source.x, target.x) - 100, y: Math.min(source.y, target.y) - 100, width: Math.max(source.x + source.width, target.x + target.width) - Math.min(source.x, target.x) + 200, height: Math.max(source.y + source.height, target.y + target.height) - Math.min(source.y, target.y) + 200 };
+    const laneClearance = Math.max(LANE_BORDER_CLEARANCE, clearance), borders = laneBoundaries(snapshot).filter((b) => b.axis === "y" ? b.value >= area.y - laneClearance && b.value <= area.y + area.height + laneClearance && b.from <= area.x + area.width && b.to >= area.x : b.value >= area.x - laneClearance && b.value <= area.x + area.width + laneClearance && b.from <= area.y + area.height && b.to >= area.y);
     const scope = index.get(connection.flowScopeId), insideScope = scope?.type === "bpmn:SubProcess" && scope.id !== source.id && scope.id !== target.id;
     const inBounds = (p) => !insideScope || p.x >= scope.x + 4 && p.x <= scope.x + scope.width - 4 && p.y >= scope.y + 28 && p.y <= scope.y + scope.height - 4;
     const ancestors = /* @__PURE__ */ new Set();
     for (const node of [source, target]) for (let p = index.get(node.parentId); p && !ancestors.has(p.id); p = index.get(p.parentId)) ancestors.add(p.id);
     const obstacles = [];
     for (const e of elements) {
-      if (rect(e) && !e.waypoints && !["bpmn:Participant", "bpmn:Lane", "bpmn:Group", "bpmn:Process", "bpmn:Collaboration"].includes(e.type) && !ancestors.has(e.id)) {
+      if (rect2(e) && !e.waypoints && !["bpmn:Participant", "bpmn:Lane", "bpmn:Group", "bpmn:Process", "bpmn:Collaboration"].includes(e.type) && !ancestors.has(e.id)) {
         const own = [source.id, target.id].includes(e.id), padding = own ? 0 : clearance;
         const box = { x: e.x - padding, y: e.y - padding, width: e.width + padding * 2, height: e.height + padding * 2, id: e.id, own };
         if (boxesOverlap(box, area)) obstacles.push(box);
       }
-      if (e.id !== connection.id && e.labelBounds && rect(e.labelBounds) && !["bpmn:Group", "bpmn:Lane", "bpmn:Participant"].includes(e.type)) {
+      if (e.id !== connection.id && e.labelBounds && rect2(e.labelBounds) && !["bpmn:Group", "bpmn:Lane", "bpmn:Participant"].includes(e.type)) {
         const b = e.labelBounds, box = { x: b.x - 3, y: b.y - 3, width: b.width + 6, height: b.height + 6, id: e.id + ":label" };
         if (boxesOverlap(box, area)) obstacles.push(box);
       }
     }
     const others = elements.filter((e) => e.id !== connection.id && e.waypoints?.length > 1);
     const segmentCost = (a, b) => {
-      if (!axis(a, b) || !inBounds(a) || !inBounds(b) || obstacles.some((box) => lineHitsBox(a, b, box) || box.own && segmentAlongBox(a, b, box))) return Infinity;
+      if (!axis(a, b) || !inBounds(a) || !inBounds(b) || obstacles.some((box) => lineHitsBox(a, b, box) || box.own && segmentAlongBox(a, b, box)) || borders.some((border) => segmentNearLaneBorder(a, b, border, laneClearance))) return Infinity;
       let penalty = 0;
       for (const other of others) {
         let crossing = false, overlap = false;
@@ -241,6 +287,7 @@ var NaraModelAudit = (() => {
     function consider(raw, pair) {
       const points = simplifyOrthogonal(raw);
       if (points.length < 2 || routeMetrics(points).reversals || !normal(points[0], points[1], pair.ss) || !normal(points.at(-1), points.at(-2), pair.ts)) return;
+      if (points.slice(1, -1).some((p) => borders.some((b) => pointNearLaneBorder(p, b, laneClearance)))) return;
       let score = 0;
       for (let i = 1; i < points.length; i++) {
         const cost = segmentCost(points[i - 1], points[i]);
@@ -259,8 +306,9 @@ var NaraModelAudit = (() => {
     }
     const perfect = best && best.score <= distance(best.pair.a, best.pair.b) + 22 + 0.01;
     if (!perfect && obstacles.length <= 90) {
-      const xs = [.../* @__PURE__ */ new Set([...pairs.flatMap((p) => [p.a.x, p.b.x, p.as.x, p.bs.x]), ...obstacles.flatMap((b) => [b.x - (b.own ? clearance : 0), b.x + b.width + (b.own ? clearance : 0)]), area.x, area.x + area.width])].sort((a, b) => a - b);
-      const ys = [.../* @__PURE__ */ new Set([...pairs.flatMap((p) => [p.a.y, p.b.y, p.as.y, p.bs.y]), ...obstacles.flatMap((b) => [b.y - (b.own ? clearance : 0), b.y + b.height + (b.own ? clearance : 0)]), area.y, area.y + area.height])].sort((a, b) => a - b);
+      const rails = (axis2) => borders.flatMap((b) => b.axis === axis2 ? [b.value - laneClearance, b.value + laneClearance] : [b.from - laneClearance, b.to + laneClearance]).filter((v) => v >= area[axis2] && v <= area[axis2] + (axis2 === "x" ? area.width : area.height));
+      const xs = [.../* @__PURE__ */ new Set([...pairs.flatMap((p) => [p.a.x, p.b.x, p.as.x, p.bs.x]), ...obstacles.flatMap((b) => [b.x - (b.own ? clearance : 0), b.x + b.width + (b.own ? clearance : 0)]), ...rails("x"), area.x, area.x + area.width])].sort((a, b) => a - b);
+      const ys = [.../* @__PURE__ */ new Set([...pairs.flatMap((p) => [p.a.y, p.b.y, p.as.y, p.bs.y]), ...obstacles.flatMap((b) => [b.y - (b.own ? clearance : 0), b.y + b.height + (b.own ? clearance : 0)]), ...rails("y"), area.y, area.y + area.height])].sort((a, b) => a - b);
       if (xs.length * ys.length <= 18e3) {
         const point = (i) => ({ x: xs[i % xs.length], y: ys[Math.floor(i / xs.length)] }), edgeCache = /* @__PURE__ */ new Map();
         const cost = (i, j) => {
@@ -286,6 +334,7 @@ var NaraModelAudit = (() => {
               if (next < 0) continue;
               const b = point(next), dir = same(a.y, b.y) ? b.x > a.x ? 1 : 2 : b.y > a.y ? 3 : 4;
               if (current.dir && dir !== current.dir && Math.ceil(dir / 2) === Math.ceil(current.dir / 2) || !current.dir && !normal(a, b, pair.ss) || next === end && !normal(b, a, pair.ts)) continue;
+              if (current.dir && current.dir !== dir && borders.some((border) => pointNearLaneBorder(a, border, laneClearance))) continue;
               const edge = cost(current.node, next);
               if (!Number.isFinite(edge)) continue;
               const value = current.cost + edge + (current.dir && current.dir !== dir ? 22 : 0), nextKey = next * 5 + dir;
@@ -315,8 +364,12 @@ var NaraModelAudit = (() => {
   function reviewVisualQuality(snapshot, { elementIds, maxIssues = 200 } = {}) {
     const elements = snapshot.elements || [], index = new Map(elements.map((e) => [e.id, e])), scope = elementIds ? new Set(elementIds) : null, issues = [];
     let total = 0;
+    const borders = laneBoundaries(snapshot);
     if (scope) {
       for (const e of elements) if (e.waypoints && (scope.has(e.sourceId) || scope.has(e.targetId))) scope.add(e.id);
+    }
+    if (scope) {
+      for (const e of elements) if (e.waypoints?.length > 1 && !scope.has(e.id) && laneRouteConflicts(e.waypoints, borders.filter((b) => b.laneIds.some((id) => scope.has(id)))).length) scope.add(e.id);
     }
     const add = (code, ids, message, details = {}) => {
       if (scope && !ids.some((id) => scope.has(id))) return;
@@ -342,6 +395,14 @@ var NaraModelAudit = (() => {
         if (!metrics.orthogonal) add("ROUTE_DIAGONAL", [e.id], "La conexi\xF3n contiene un tramo diagonal.");
         if (simple.length < e.waypoints.length) add("ROUTE_REDUNDANT_POINTS", [e.id], "El recorrido conserva puntos colineales o repetidos que se pueden eliminar.");
         if (metrics.reversals) add("ROUTE_REVERSAL", [e.id], "La conexi\xF3n avanza y retrocede inmediatamente sobre el mismo tramo.", { metrics });
+        for (const conflict of laneRouteConflicts(e.waypoints, borders)) {
+          const operation = { type: "route_orthogonal", elementId: e.id };
+          for (const end of ["source", "target"]) {
+            operation[end + "Side"] = anchorPolicy(e.routing, end) === "auto" ? "auto" : e.routing?.[end]?.side || "auto";
+            if (e.routing?.[end]?.offset !== void 0) operation[end + "Offset"] = e.routing[end].offset;
+          }
+          add("ROUTE_LANE_BORDER_CLEARANCE", [e.id, ...conflict.laneIds], "Un tramo paralelo o un codo est\xE1 demasiado cerca del separador entre carriles. Reserva un corredor interior; el cruce perpendicular est\xE1 permitido.", { ...conflict, preservesManualRoute: true, suggestedOperation: operation });
+        }
         if (metrics.shortLegs && metrics.bends) add("ROUTE_SHORT_LEG", [e.id], "La conexi\xF3n tiene un tramo corto junto a un quiebre.", { metrics });
         if (metrics.length > minimum * 2.5 && metrics.length - minimum > 200) add("ROUTE_DETOUR", [e.id], "La conexi\xF3n hace un rodeo largo; evitar cruces no basta para considerarla una buena ruta.", { metrics, minimum });
         for (const shape of [index.get(e.sourceId), index.get(e.targetId)].filter(Boolean)) {
