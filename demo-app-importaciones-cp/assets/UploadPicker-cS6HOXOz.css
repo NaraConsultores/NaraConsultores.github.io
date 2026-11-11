@@ -1,0 +1,1 @@
+.file-drop-target{min-width:0}.file-drop-target:not([data-disabled=true]){background:#f8fbff;border:1px dashed #a8bad6;border-radius:7px;padding:8px 10px}.file-drop-target[data-dragging=true]{background:#e9f2ff;border-color:#0750bd;outline:2px solid #c5dcff}.file-drop-hint{color:#4a6084;margin-top:4px;font-size:12px;display:block}
