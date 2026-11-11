@@ -1,0 +1,1 @@
+var e=`/demo-app-importaciones-cp/assets/pdf.worker.min-Dswkl-cV.mjs`;export{e as t};
