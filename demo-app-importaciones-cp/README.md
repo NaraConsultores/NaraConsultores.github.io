@@ -1,6 +1,6 @@
 # ATLAS · Demo de Gestión de Compras e Importaciones
 
-Versión `0.16.109-demo`. [Abrir demo](https://demo.naraconsultores.com/demo-app-importaciones-cp/).
+Versión `0.16.110-demo`. [Abrir demo](https://demo.naraconsultores.com/demo-app-importaciones-cp/).
 
 Muestra publicada autorizada de18 expedientes de Airtable y los mismos dos ejemplos simulados de Compras de la demo local. Fechas y metas del corte de19/10/2026; Catálogos operativos completos y correos empresariales autorizados DEC-216. La carga es una copia estática y no sincroniza Airtable. Incluye todos los registros del maestro JDE y referencias cruzadas como datos; excluye archivos originales y plantillas históricas retiradas. Las capturas y los adjuntos se recuperan al recargar desde el mismo navegador. Cada navegador tiene su propio espacio de demo. JDE, Getpay, correo y documentos se simulan; esta demo no conecta con sistemas operativos. Su publicación no constituye aceptación funcional del cliente.
 
@@ -25,3 +25,5 @@ La traducción usa los pedidos versionados y autorizados de Supabase y confirma 
 El cotejo automático consulta el corte de pedidos JDE habilitado para todos los expedientes del espacio compartido.
 
 La apertura difiere adjuntos. Compras agiliza el cotejo, la captura y el detalle de artículos.
+
+Detalle de artículos permite filtrar Bloqueos y Avisos con dos casillas que se pueden combinar.
