@@ -28,7 +28,13 @@
       unique(t.id);text(t.name,'Nombre de tabla');number(t.x,'Posición X');number(t.y,'Posición Y');number(t.width,'Ancho');
       if(t.width<200 || t.width>1000 || !Array.isArray(t.fields) || t.fields.length>250)throw error('ER_INVALID','La tabla requiere ancho de 200–1000 y hasta 250 campos.');
       visualStyle(t.style);const names=new Set();
-      for(const f of t.fields){unique(f.id);text(f.name,'Nombre de campo');text(f.dataType,'Tipo de dato',80);if(names.has(f.name.toLocaleLowerCase()))throw error('ER_INVALID','Los nombres de campo deben ser únicos en cada tabla.');names.add(f.name.toLocaleLowerCase());for(const key of ['primaryKey','foreignKey','nullable'])if(typeof f[key]!=='boolean')throw error('ER_INVALID','Las opciones PK, FK y nulo deben ser booleanas.');}
+      for(const f of t.fields){
+        unique(f.id);text(f.name,'Nombre de campo');text(f.dataType,'Tipo de dato',80);
+        if(f.label!==undefined)text(f.label,'Etiqueta visible');
+        if(names.has(f.name.toLocaleLowerCase()))throw error('ER_INVALID','Los nombres de campo deben ser únicos en cada tabla.');
+        names.add(f.name.toLocaleLowerCase());
+        for(const key of ['primaryKey','foreignKey','nullable'])if(typeof f[key]!=='boolean')throw error('ER_INVALID','Las opciones PK, FK y nulo deben ser booleanas.');
+      }
     }
     for(const r of model.relationships){visualStyle(r.style);unique(r.id);field(model,r.sourceTableId,r.sourceFieldId);field(model,r.targetTableId,r.targetFieldId);if(r.sourceFieldId===r.targetFieldId)throw error('ER_INVALID','Elige dos campos distintos para la relación.');if(!cards.includes(r.sourceCardinality)||!cards.includes(r.targetCardinality))throw error('ER_INVALID','Cardinalidad no válida.');if(r.label && (typeof r.label!=='string'||r.label.length>120))throw error('ER_INVALID','Nombre de relación no válido.');}
     return model;
@@ -53,6 +59,11 @@
       const entity=table(model,op.tableId);const existing=op.fieldId?field(model,op.tableId,op.fieldId):null;
       if(existing){for(const key of ['name','dataType','primaryKey','foreignKey','nullable'])if(op[key]!==undefined)existing[key]=op[key];affectedId=existing.id;}
       else{const added=makeField(op);entity.fields.push(added);affectedId=added.id;}
+    }else if(op.type==='erd_field_label'){
+      const existing=field(model,op.tableId,op.fieldId);
+      if(op.label===null)delete existing.label;
+      else existing.label=text(op.label,'Etiqueta visible');
+      affectedId=existing.id;
     }else if(op.type==='erd_field_move'){
       const entity=table(model,op.tableId),index=entity.fields.findIndex(f=>f.id===op.fieldId);field(model,op.tableId,op.fieldId);
       if(!['up','down'].includes(op.direction))throw error('ER_INVALID','Dirección de campo no válida.');

@@ -658,6 +658,9 @@ var NaraModelAudit = (() => {
         for (const field of table.fields || []) {
           if (names.has(field.name)) add("DUPLICATE_FIELD", "error", [table.id, field.id], "Nombre de campo repetido.");
           names.add(field.name);
+          if (field.label !== void 0 && (typeof field.label !== "string" || !field.label.trim() || field.label.length > 120)) {
+            add("INVALID_FIELD_LABEL", "error", [table.id, field.id], "La etiqueta visible debe tener entre 1 y 120 caracteres.");
+          }
         }
       }
       for (const relation of model.relationships || []) for (const side of ["source", "target"]) {
