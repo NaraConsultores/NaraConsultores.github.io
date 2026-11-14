@@ -1,6 +1,6 @@
 # ATLAS · Demo de Gestión de Compras e Importaciones
 
-Versión `0.16.129-demo`. [Abrir demo](https://demo.naraconsultores.com/demo-app-importaciones-cp/).
+Versión `0.16.130-demo`. [Abrir demo](https://demo.naraconsultores.com/demo-app-importaciones-cp/).
 
 Muestra publicada autorizada de18 expedientes de Airtable y los mismos dos ejemplos simulados de Compras de la demo local. Fechas y metas del corte de19/10/2026; Catálogos operativos completos y correos empresariales autorizados DEC-216. La carga es una copia estática y no sincroniza Airtable. Incluye todos los registros del maestro JDE y referencias cruzadas como datos; excluye archivos originales y plantillas históricas retiradas. Las capturas y los adjuntos se recuperan al recargar desde el mismo navegador. Cada navegador tiene su propio espacio de demo. JDE, Getpay, correo y documentos se simulan; esta demo no conecta con sistemas operativos. Su publicación no constituye aceptación funcional del cliente.
 
@@ -63,3 +63,5 @@ El cotejo muestra la caducidad en azul y la falta de línea en la orden por sepa
 Mercadería lista puede capturarse de forma independiente de los demás hitos.
 
 El envío de traducciones de gran volumen conserva la referencia de orden por artículo.
+
+Captura y envío de hasta 5.000 líneas con avance visible y versión encima del selector de roles.
