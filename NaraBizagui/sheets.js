@@ -100,14 +100,14 @@
       if (!importing && previousRoot && previousRoot !== id && !goingBack) back.push(previousRoot);
       previousRoot=id;render();eventBus.fire('nara.sheet.changed');
     }
-    function open(id) {
+    function open(id, target) {
       canNavigate();
-      navigate(id);
+      navigate(id, target);
       // Even clicking the current tab is an explicit, non-call visit.
       calls = []; renderReturn();
     }
-    function navigate(id) {
-      if (naraER.list().some(s => s.id === id)) { naraER.open(id); return; }
+    function navigate(id, target) {
+      if (naraER.list().some(s => s.id === id)) { naraER.open(id, target); return; }
       const root = canvas.findRoot(id);
       if (!root) throw failure('SHEET_NOT_FOUND', 'La hoja no existe en este archivo.');
       const wasEr=!!naraER.active();

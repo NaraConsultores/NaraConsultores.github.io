@@ -16,17 +16,40 @@
     const extension=id=>{const value=extensions().find(e=>e.$type==='nara:EntityRelationship'&&e.id===id);if(!value)throw fail('SHEET_NOT_FOUND','No existe esa hoja de datos.');return value;};
     function read(id=activeId){const value=extension(id);let data;try{data=JSON.parse(value.json);}catch{throw fail('ER_FORMAT','El modelo de datos no se puede leer. Su contenido original se conserva.');}if(value.version&&value.version!=='1'||data?.id!==value.id)throw fail('ER_FORMAT','La versión o identidad del modelo no es compatible. Se conserva su contenido original.');return M.clone(M.validate(data));}
     function pending(){if(!activeId)return false;if(inline)return true;if(!selectedId)return false;const model=read(),entity=model.tables.find(t=>t.id===selectedId),relation=model.relationships.find(r=>r.id===selectedId);if(entity)return $('erdTableName').value!==entity.name||Number($('erdTableWidth').value)!==entity.width;if(relation)return $('erdRelationSource').value!==relation.sourceTableId+'|'+relation.sourceFieldId||$('erdRelationTarget').value!==relation.targetTableId+'|'+relation.targetFieldId||$('erdSourceCardinality').value!==relation.sourceCardinality||$('erdTargetCardinality').value!==relation.targetCardinality||$('erdRelationLabel').value!==(relation.label||'');return false;}
-    function setActive(id,silent=false){
-      cancelInline();activeId=id;selectedId=null;selectedField=null;connectionStart=null;relationMode=false;preview=null;
+    function setActive(id, silent = false, target) {
+      cancelInline();
+      activeId = id;
+      selectedId = target?.table.id ?? null;
+      selectedField = target?.fieldId ?? null;
+      connectionStart = null;
+      relationMode = false;
+      preview = null;
       document.body.classList.toggle('erd-active',!!id);svg.toggleAttribute('hidden',!id);
       $('bpmnTools').hidden=!!id;$('erdTools').hidden=!id;
       $('modeBpmn').setAttribute('aria-pressed',String(!id));$('modeEr').setAttribute('aria-pressed',String(!!id));
       $('propertiesPanel').hidden=!!id;$('erdPropertiesPanel').hidden=!id;
       $('diagramKindNote').textContent=id?'Modelo de datos':'Roles × etapas';
-      if(id){render();}else{$('erdPropertiesPanel').hidden=true;}
+      if (id) {
+        if (target) centerTarget(target);
+        render();
+      } else {
+        $('erdPropertiesPanel').hidden=true;
+      }
       if(!silent)eventBus.fire('nara.erd.view.changed',{id});
     }
-    function open(id){read(id);if(pending())throw fail('FORM_PENDING','Aplica o cierra la edición pendiente antes de cambiar de hoja.');if(activeId===id)return;selection.select([]);setActive(id);}
+    function open(id, {tableId, fieldId} = {}) {
+      const model = read(id);
+      if (pending()) throw fail('FORM_PENDING', 'Aplica o cierra la edición pendiente antes de cambiar de hoja.');
+      if (activeId === id && !tableId) return;
+      let target;
+      if (tableId) {
+        const table = M.table(model, tableId);
+        const row = fieldId == null ? -1 : table.fields.indexOf(M.field(model, tableId, fieldId));
+        target = {table, fieldId, row};
+      }
+      selection.select([]);
+      setActive(id, false, target);
+    }
     function close(options={}){if(activeId)setActive(null,options.silent);}
     commandStack.registerHandler('nara.erd.update',function(){
       const install=(context,value,id)=>{
@@ -68,6 +91,13 @@
     }
     function view(){if(!views.has(activeId))views.set(activeId,{x:0,y:0,scale:1});return views.get(activeId);}
     function setView(){if(!activeId)return;const v=view(),r=svg.getBoundingClientRect();svg.setAttribute('viewBox',`${v.x} ${v.y} ${Math.max(r.width,1)/v.scale} ${Math.max(r.height,1)/v.scale}`);positionInline();eventBus.fire('nara.erd.zoom',{scale:v.scale});}
+    function centerTarget({table, row}) {
+      const current = view();
+      const {width, height} = svg.getBoundingClientRect();
+      const targetY = table.y + (row < 0 ? M.height(table) / 2 : 49 + row * 30);
+      current.x = table.x + table.width / 2 - width / (2 * current.scale);
+      current.y = targetY - height / (2 * current.scale);
+    }
     function fit(){if(!activeId)return;const model=read(),r=svg.getBoundingClientRect();if(!model.tables.length){views.set(activeId,{x:0,y:0,scale:1});setView();return;}const left=Math.min(...model.tables.map(t=>t.x))-75,top=Math.min(...model.tables.map(t=>t.y))-70,right=Math.max(...model.tables.map(t=>t.x+t.width))+85,bottom=Math.max(...model.tables.map(t=>t.y+M.height(t)))+70;views.set(activeId,{x:left,y:top,scale:Math.max(.1,Math.min(1.5,r.width/(right-left),r.height/(bottom-top)))});setView();}
     function zoom(value){if(!activeId)return;if(value==='fit-viewport')return fit();const v=view(),r=svg.getBoundingClientRect(),previous=v.scale;v.scale=Math.max(.1,Math.min(3,value));v.x+=r.width/2/previous-r.width/2/v.scale;v.y+=r.height/2/previous-r.height/2/v.scale;setView();}
     const point=event=>{const r=svg.getBoundingClientRect(),v=view();return{x:v.x+(event.clientX-r.left)/v.scale,y:v.y+(event.clientY-r.top)/v.scale};};
@@ -101,12 +131,12 @@
         const height=M.height(entity),selected=controls&&selectedId===entity.id,s=entity.style||{};
         const g=node('g',{transform:`translate(${entity.x},${entity.y})`,'data-table':entity.id,class:'erd-table'+(selected&&selectedField?' erd-field-selected':''),role:'group','aria-label':entity.name});g.appendChild(node('title',{},entity.name));
         g.setAttribute('fill',s.fontColor||'#213e53');g.setAttribute('font-size',s.fontSize||12);if(s.bold)g.setAttribute('font-weight',600);
-        g.appendChild(node('rect',{width:entity.width,height,rx:1,fill:s.fill||'#fff',stroke:selected?'#1097d2':s.stroke||'#55758c','stroke-width':s.strokeWidth||1.2}));
+        g.appendChild(node('rect',{width:entity.width,height,rx:1,fill:s.fill||'#fff',stroke:selected?'#1097d2':s.stroke||'#55758c','stroke-width':selected?2:s.strokeWidth||1.2}));
         g.appendChild(node('rect',{width:entity.width,height:34,rx:1,fill:s.fill||'#edf3f7','data-role':'header'}));
         g.appendChild(node('path',{d:`M0 34 H${entity.width} M42 34 V${height-28}`,fill:'none',stroke:'#b6c8d5','stroke-width':1}));
         g.appendChild(node('text',{x:entity.width/2,y:22,'text-anchor':'middle','font-weight':600,'pointer-events':'none','data-cell':'name'},entity.name.length>38?entity.name.slice(0,37)+'…':entity.name));
         for(const [index,f]of entity.fields.entries()){
-          const y=34+index*30,selectedRow=controls&&selectedField===f.id;
+          const y=34+index*30,selectedRow=selected&&selectedField===f.id;
           const visibleName=f.label??f.name;
           const fieldTitle=f.label?`${visibleName} · Nombre físico: ${f.name}`:f.name;
           const row=node('g',{'data-field':f.id,'data-table':entity.id,class:'erd-field',role:'button','aria-label':fieldTitle+', '+f.dataType+(f.primaryKey?', clave primaria':'')+(f.foreignKey?', clave foránea':'')});

@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="es">
 <head>
-  <meta name="naraflows-build" content="81ce77d0e17e38bc">
+  <meta name="naraflows-build" content="62cc1c6a7891edca">
   <meta name="naraflows-mode" content="browser">
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>NaraFlows</title>
@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="vendor/bpmn.css?v=b4b8f7070233c196">
   <link rel="stylesheet" href="vendor/bpmn-js.css?v=b09861c8e7030764">
   <link rel="stylesheet" href="modelador.css?v=b4310b0409bca8b6">
-  <link rel="stylesheet" href="workspace.css?v=b2fc2ad13ef2d470">
+  <link rel="stylesheet" href="workspace.css?v=f1d26a33f5cb77b8">
 </head>
 <body>
   <header class="titlebar">
@@ -59,7 +59,23 @@
       <div class="diagram-strip"><select id="diagramSelect" class="diagram-select" aria-label="Diagrama del proyecto"></select><button id="reloadDiagram" class="text-button" title="Volver a cargar el archivo del proyecto">Recargar diagrama</button><a id="fileModeLink" class="text-button" href="?modo=archivos">Abrir modo archivos</a><button id="showLeft" class="text-button" hidden>Mostrar herramientas</button><button id="showRight" class="text-button">Propiedades</button><span class="strip-note" id="diagramKindNote">Roles × etapas</span></div>
       <div id="externalChange" class="change-notice" hidden><span id="externalChangeText"></span><button id="exportLocalChanges">Exportar mis cambios</button><button id="loadDiskChanges">Cargar archivo actualizado</button></div>
       <div id="syncNotice" class="change-notice" role="status" hidden><span id="syncNoticeText"></span><button id="closeSyncNotice" aria-label="Cerrar aviso de sincronización">×</button></div>
-      <div id="canvas"><svg id="erdCanvas" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Modelo de datos editable" hidden></svg><div id="subprocessReturnBar" class="subprocess-return-bar" hidden><button id="subprocessReturn" type="button" class="subprocess-return"></button></div></div>
+      <div id="canvas">
+        <svg id="erdCanvas" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Modelo de datos editable" hidden></svg>
+        <div id="erdSearch" class="erd-search" hidden>
+          <button id="erdSearchToggle" type="button" aria-label="Buscar tablas y campos" aria-expanded="false" aria-controls="erdSearchPanel" aria-keyshortcuts="Alt+B" title="Buscar tablas y campos (Alt+B)">
+            <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="8.5" cy="8.5" r="5"/><path d="m12.2 12.2 4 4"/></svg>
+            Buscar
+          </button>
+          <div id="erdSearchPanel" class="erd-search-panel" hidden>
+            <label for="erdSearchInput" class="visually-hidden">Nombre de tabla o campo</label>
+            <input id="erdSearchInput" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="erdSearchResults" placeholder="Tabla o campo" autocomplete="off" spellcheck="false" maxlength="120">
+            <p id="erdSearchStatus" role="status"></p>
+            <ul id="erdSearchResults" role="listbox" aria-label="Tablas y campos encontrados" hidden></ul>
+            <button id="erdSearchMore" type="button" hidden>Mostrar más resultados</button>
+          </div>
+        </div>
+        <div id="subprocessReturnBar" class="subprocess-return-bar" hidden><button id="subprocessReturn" type="button" class="subprocess-return"></button></div>
+      </div>
       <nav class="stage-navigation" id="stageNavigation" aria-label="Enfocar etapa" hidden><button data-stage="all" class="active">Vista general</button></nav>
       <div class="sheet-bar"><button id="sheetBack" class="sheet-back" title="Volver a la hoja anterior" aria-label="Volver a la hoja anterior" disabled>←</button><nav id="sheetNavigation" class="sheet-navigation" role="tablist" aria-label="Hojas del archivo BPMN"></nav><button id="newSheet" class="new-sheet" aria-label="Nueva hoja de proceso" title="Nueva hoja de proceso">＋</button></div>
     </section>
@@ -126,8 +142,8 @@
   <script src="editor-tools.js?v=753278356a70c89f"></script>
   <script src="erd-model.js?v=4d77a9fa27e241ec"></script>
   <script src="bpmn-merge.js?v=1a79451bae0e236f"></script>
-  <script src="erd-editor.js?v=dce952b7ead2d9c9"></script>
-  <script src="sheets.js?v=bd6c2b349fc15b99"></script>
+  <script src="erd-editor.js?v=2af91abc29886408"></script>
+  <script src="sheets.js?v=e11495ba9093cfdd"></script>
   <script src="editor-style.js?v=b5d7097189894073"></script>
   <script src="editor-properties.js?v=80cef0f8efc02a3f"></script>
   <script src="vendor/model-audit.js?v=2de3701a67cbf643"></script>
@@ -142,5 +158,6 @@
   <script src="mcp-bridge.js?v=ad619a8906c20906"></script>
   <script src="microsoft-ui.js?v=2f7554cbf94c6fb6"></script>
   <script src="instant-edit.js?v=a5b55f83b2dea674"></script>
-  <script src="workspace-ui.js?v=9ecf26b0319e906e"></script>
+  <script src="erd-search.js?v=7180463a1c0256d6"></script>
+  <script src="workspace-ui.js?v=c68ab164140b2ec2"></script>
 </body></html>
