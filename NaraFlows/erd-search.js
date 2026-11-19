@@ -56,7 +56,7 @@
     const sheets = modeler.get('naraSheets');
     const events = modeler.get('eventBus');
     const get = id => document.getElementById(id);
-    const search = get('erdSearch');
+    const canvas = get('erdCanvas');
     const toggle = get('erdSearchToggle');
     const panel = get('erdSearchPanel');
     const input = get('erdSearchInput');
@@ -149,7 +149,7 @@
     }
 
     function open() {
-      if (search.hidden || document.querySelector('dialog[open]')) return;
+      if (toggle.hidden || document.querySelector('dialog[open]')) return;
       if (window.NaraPropertyDraftPending?.()) {
         get('status').textContent = 'Termina la edición pendiente antes de buscar.';
         return;
@@ -167,7 +167,10 @@
       find = undefined;
       previousFocus = undefined;
       renderResults();
-      focusTarget?.focus({preventScroll: true});
+      if (focusTarget) {
+        const visibleTarget = focusTarget.getClientRects().length ? focusTarget : canvas;
+        visibleTarget.focus({preventScroll: true});
+      }
     }
 
     function choose(index) {
@@ -182,8 +185,8 @@
     }
 
     function syncVisibility() {
-      search.hidden = !editor.active();
-      if (search.hidden && !panel.hidden) close();
+      toggle.hidden = !editor.active();
+      if (toggle.hidden && !panel.hidden) close();
     }
 
     toggle.addEventListener('pointerdown', event => {
@@ -218,18 +221,17 @@
       input.focus({preventScroll: true});
       highlight(next);
     });
-    search.addEventListener('focusout', event => {
-      if (!panel.hidden && event.relatedTarget && !search.contains(event.relatedTarget)) close();
-    });
-    document.addEventListener('pointerdown', event => {
-      if (!panel.hidden && !search.contains(event.target)) close();
-    });
+    function dismissOutside(event) {
+      if (!panel.hidden && !panel.contains(event.target) && !toggle.contains(event.target)) close();
+    }
+    document.addEventListener('focusin', dismissOutside);
+    document.addEventListener('pointerdown', dismissOutside);
     document.addEventListener('keydown', event => {
-      if (search.hidden || event.isComposing) return;
+      if (toggle.hidden || event.isComposing) return;
       if (event.key === 'Escape' && !panel.hidden) {
         event.preventDefault();
         event.stopPropagation();
-        const restoreFocus = previousFocus?.isConnected && previousFocus !== document.body;
+        const restoreFocus = previousFocus !== document.body && previousFocus?.getClientRects().length;
         close(restoreFocus ? previousFocus : toggle);
       } else if (event.altKey && !event.ctrlKey && !event.metaKey && !event.shiftKey && event.key.toLowerCase() === 'b' && !document.querySelector('dialog[open]')) {
         event.preventDefault();
@@ -240,7 +242,7 @@
 
     events.on('nara.sheet.changed', syncVisibility);
     events.on('import.parse.start', () => {
-      search.hidden = true;
+      toggle.hidden = true;
       close();
     });
     events.on('commandStack.changed', () => {

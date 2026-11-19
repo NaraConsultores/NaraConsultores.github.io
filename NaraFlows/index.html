@@ -1,7 +1,7 @@
 <!doctype html>
 <html lang="es">
 <head>
-  <meta name="naraflows-build" content="62cc1c6a7891edca">
+  <meta name="naraflows-build" content="a41f762649a02fad">
   <meta name="naraflows-mode" content="browser">
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <title>NaraFlows</title>
@@ -11,7 +11,7 @@
   <link rel="stylesheet" href="vendor/bpmn.css?v=b4b8f7070233c196">
   <link rel="stylesheet" href="vendor/bpmn-js.css?v=b09861c8e7030764">
   <link rel="stylesheet" href="modelador.css?v=b4310b0409bca8b6">
-  <link rel="stylesheet" href="workspace.css?v=f1d26a33f5cb77b8">
+  <link rel="stylesheet" href="workspace.css?v=8db2876387225f0f">
 </head>
 <body>
   <header class="titlebar">
@@ -31,7 +31,13 @@
   </nav>
   <div class="ribbon" id="ribbon">
     <div class="ribbon-content" data-content="inicio">
-      <div class="ribbon-group"><button id="undo" title="Deshacer (Ctrl+Z)"><span class="button-symbol">↶</span>Deshacer</button><button id="redo" title="Rehacer (Ctrl+Y)"><span class="button-symbol">↷</span>Rehacer</button><span class="group-caption">Edición</span></div>
+      <div class="ribbon-group">
+        <button id="erdSearchToggle" type="button" aria-label="Buscar tablas y campos" aria-expanded="false" aria-controls="erdSearchPanel" aria-keyshortcuts="Alt+B" title="Buscar tablas y campos (Alt+B)" hidden>
+          <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="8.5" cy="8.5" r="5"/><path d="m12.2 12.2 4 4"/></svg>
+          <span class="command-label">Buscar</span>
+        </button>
+        <button id="undo" title="Deshacer (Ctrl+Z)"><span class="button-symbol">↶</span>Deshacer</button><button id="redo" title="Rehacer (Ctrl+Y)"><span class="button-symbol">↷</span>Rehacer</button><span class="group-caption">Edición</span>
+      </div>
       <div class="ribbon-group"><button id="delete" disabled><span class="button-symbol">⌫</span>Eliminar selección</button><button id="properties"><span class="button-symbol">≡</span>Propiedades</button><span class="group-caption">Elemento</span></div>
       <div class="ribbon-group"><button data-fit><span class="button-symbol">⊞</span>Encajar diagrama</button><span class="group-caption">Vista</span></div>
     </div>
@@ -60,19 +66,13 @@
       <div id="externalChange" class="change-notice" hidden><span id="externalChangeText"></span><button id="exportLocalChanges">Exportar mis cambios</button><button id="loadDiskChanges">Cargar archivo actualizado</button></div>
       <div id="syncNotice" class="change-notice" role="status" hidden><span id="syncNoticeText"></span><button id="closeSyncNotice" aria-label="Cerrar aviso de sincronización">×</button></div>
       <div id="canvas">
-        <svg id="erdCanvas" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Modelo de datos editable" hidden></svg>
-        <div id="erdSearch" class="erd-search" hidden>
-          <button id="erdSearchToggle" type="button" aria-label="Buscar tablas y campos" aria-expanded="false" aria-controls="erdSearchPanel" aria-keyshortcuts="Alt+B" title="Buscar tablas y campos (Alt+B)">
-            <svg viewBox="0 0 20 20" width="16" height="16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"><circle cx="8.5" cy="8.5" r="5"/><path d="m12.2 12.2 4 4"/></svg>
-            Buscar
-          </button>
-          <div id="erdSearchPanel" class="erd-search-panel" hidden>
-            <label for="erdSearchInput" class="visually-hidden">Nombre de tabla o campo</label>
-            <input id="erdSearchInput" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="erdSearchResults" placeholder="Tabla o campo" autocomplete="off" spellcheck="false" maxlength="120">
-            <p id="erdSearchStatus" role="status"></p>
-            <ul id="erdSearchResults" role="listbox" aria-label="Tablas y campos encontrados" hidden></ul>
-            <button id="erdSearchMore" type="button" hidden>Mostrar más resultados</button>
-          </div>
+        <svg id="erdCanvas" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Modelo de datos editable" tabindex="-1" hidden></svg>
+        <div id="erdSearchPanel" class="erd-search-panel" hidden>
+          <label for="erdSearchInput" class="visually-hidden">Nombre de tabla o campo</label>
+          <input id="erdSearchInput" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="erdSearchResults" placeholder="Tabla o campo" autocomplete="off" spellcheck="false" maxlength="120">
+          <p id="erdSearchStatus" role="status"></p>
+          <ul id="erdSearchResults" role="listbox" aria-label="Tablas y campos encontrados" hidden></ul>
+          <button id="erdSearchMore" type="button" hidden>Mostrar más resultados</button>
         </div>
         <div id="subprocessReturnBar" class="subprocess-return-bar" hidden><button id="subprocessReturn" type="button" class="subprocess-return"></button></div>
       </div>
@@ -158,6 +158,6 @@
   <script src="mcp-bridge.js?v=ad619a8906c20906"></script>
   <script src="microsoft-ui.js?v=2f7554cbf94c6fb6"></script>
   <script src="instant-edit.js?v=a5b55f83b2dea674"></script>
-  <script src="erd-search.js?v=7180463a1c0256d6"></script>
-  <script src="workspace-ui.js?v=c68ab164140b2ec2"></script>
+  <script src="erd-search.js?v=7c2431e6486c8d07"></script>
+  <script src="workspace-ui.js?v=c3163339098ba899"></script>
 </body></html>

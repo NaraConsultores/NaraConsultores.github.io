@@ -1,7 +1,6 @@
 'use strict';
 (() => {
   const $=id=>document.getElementById(id), modeler=window.bpmnModeler, events=modeler.get('eventBus');
-  window.NaraERSearch.mount(modeler);
   window.NaraReadOnlyControls=()=>{const readOnly=window.browserBpmnFiles.readOnly;for(const el of $('rightPanel').querySelectorAll('input,textarea,select,button:not([data-inspector-tab]):not(#hideRight)')){if(readOnly&&!el.disabled){el.dataset.readonlyDisabled='true';el.disabled=true;}else if(!readOnly&&el.dataset.readonlyDisabled){delete el.dataset.readonlyDisabled;el.disabled=false;}}};
   new MutationObserver(()=>window.NaraReadOnlyControls()).observe($('rightPanel'),{childList:true,subtree:true,attributes:true,attributeFilter:['disabled']});
   const node=(tag,className,text)=>{const el=document.createElement(tag);if(className)el.className=className;if(text!==undefined)el.textContent=text;return el;};
@@ -56,7 +55,9 @@
   fileMenu.body.appendChild(action('Información e historial…',()=>{renderFile();show(infoDialog.el);}));
   $('diagramTitle').parentElement.appendChild(action('Información del archivo',()=>{renderFile();show(infoDialog.el);}));$('diagramTitle').parentElement.classList.add('file-title-group');
   const commandActions=node('div','command-actions');toolbar.appendChild(commandActions);
+  move('erdSearchToggle',commandActions);
   for(const id of ['undo','redo','properties']){const el=move(id,commandActions),symbol=el.querySelector('.button-symbol'),label=node('span','command-label',id==='undo'?'Deshacer':id==='redo'?'Rehacer':'Propiedades');el.replaceChildren(...(symbol?[symbol]:[]),label);el.setAttribute('aria-label',label.textContent);}
+  window.NaraERSearch.mount(modeler);
   move('delete',editMenu.body,'Eliminar selección');editMenu.body.appendChild(action('Deshacer',()=>$('undo').click()));editMenu.body.appendChild(action('Rehacer',()=>$('redo').click()));
   const originalFit=document.querySelector('[data-fit]');viewMenu.body.appendChild(originalFit);originalFit.replaceChildren(document.createTextNode('Encajar hoja'));originalFit.classList.add('workspace-action');
   move('actualSize',viewMenu.body,'Zoom al 100 %');move('focusCanvasRibbon',viewMenu.body,'Ampliar lienzo');move('toggleLeft',viewMenu.body,'Mostrar u ocultar herramientas');move('toggleRight',viewMenu.body,'Mostrar u ocultar propiedades');
