@@ -1,0 +1,36 @@
+name: ATLAS estado de arranque
+
+on:
+  schedule:
+    - cron: '2-57/5 * * * *'
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - .github/workflows/atlas-arranque.yml
+      - .github/atlas/refresh-startup.mjs
+      - demo-app-importaciones-cp/atlas-checkpoint/manifest.json
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: atlas-estado-arranque-compartido
+  cancel-in-progress: false
+
+jobs:
+  actualizar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+          sparse-checkout: |
+            .github/atlas
+            demo-app-importaciones-cp
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: '22'
+      - run: node --max-old-space-size=5120 .github/atlas/refresh-startup.mjs
