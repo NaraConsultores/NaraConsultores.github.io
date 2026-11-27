@@ -118282,7 +118282,7 @@ function restoreJournalUI(initial, state, { pendingReplay = false } = {}) {
 }
 //#endregion
 //#region src/adapters/web/startupRead.js
-var webCheckpointContract = "f4412e427297120f1f66d6afcb00471843098825b7a41a52e9575ebc2006aba6";
+var webCheckpointContract = "a1320cd91e78d02f5d9b4d294c7c8e6b8415c80d5a75aa2fb580ad8a3cd50b48";
 var startupRequest;
 function stateReadPath(simple, contract, after) {
 	const params = new URLSearchParams();
@@ -120229,7 +120229,7 @@ var checkpointAssetBase = "/demo-app-importaciones-cp/";
 var checkpointProcessorContract = webCheckpointContract;
 async function buildStartupCheckpoint(state, readPublishedAsset) {
 	const prior = state.checkpoint;
-	if (!Number.isSafeInteger(state.revision) || state.revision < 1 || !Array.isArray(state.actions) || prior && prior.contract !== "f4412e427297120f1f66d6afcb00471843098825b7a41a52e9575ebc2006aba6" || (prior?.revision || 0) + state.actions.length !== state.revision) throw Error("No se puede consolidar una revisión incompleta.");
+	if (!Number.isSafeInteger(state.revision) || state.revision < 1 || !Array.isArray(state.actions) || prior && prior.contract !== "a1320cd91e78d02f5d9b4d294c7c8e6b8415c80d5a75aa2fb580ad8a3cd50b48" || (prior?.revision || 0) + state.actions.length !== state.revision) throw Error("No se puede consolidar una revisión incompleta.");
 	const [initial, journal] = await Promise.all([prepareStartupSession({
 		designVersion: "v18",
 		deferArticleMaster: true,
