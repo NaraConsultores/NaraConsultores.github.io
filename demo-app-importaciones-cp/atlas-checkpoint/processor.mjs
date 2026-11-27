@@ -36637,11 +36637,11 @@ var liquidacionFormatoLayout_default = {
 //#endregion
 //#region src/adapters/liquidacionFormatoModel.js
 var clean$22 = (value) => String(value ?? "").replace(/[\u2010-\u2015\u2212]/g, "-").replace(/[^\x20-\x7E\xA0-\xFF\n]/g, " ");
-var num$1 = (value, decimals = 2) => Number(value).toLocaleString("en-US", {
+var num = (value, decimals = 2) => Number(value).toLocaleString("en-US", {
 	minimumFractionDigits: decimals,
 	maximumFractionDigits: decimals
 });
-var money$2 = (value, prefix = "$") => value == null ? "" : `${prefix}${num$1(value)}`;
+var money$2 = (value, prefix = "$") => value == null ? "" : `${prefix}${num(value)}`;
 var key$7 = (value) => clean$22(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 var sum$2 = (rows, column) => rows.reduce((total, row) => total + Number(row[column] || 0), 0);
 function formatoRow(charge) {
@@ -36686,15 +36686,15 @@ function formatoValues(data) {
 		F6: header.shipment || "",
 		B7: header.control || "",
 		D7: header.packages ?? "",
-		F7: num$1(data.exchangeRate, 4),
+		F7: num(data.exchangeRate, 4),
 		B8: header.merchandise || "",
 		D8: header.incoterm || "",
-		F8: form.factor == null ? "" : num$1(form.factor),
+		F8: form.factor == null ? "" : num(form.factor),
 		B9: header.oi || "",
 		D9: header.responsible || "",
 		F9: header.target || "",
 		A45: header.observations || "",
-		F18: num$1(data.exchangeRate, 4),
+		F18: num(data.exchangeRate, 4),
 		C48: "",
 		C49: form.signature?.name || "Elaborado por",
 		F13: "21",
@@ -36733,13 +36733,10 @@ function formatoValues(data) {
 	const fob = rows.find((row) => row.Concepto === "Mercadería / FOB") || {};
 	values.D12 = money$2(fob["US$"]);
 	values.G12 = Number(fob["US$"]) > 0 ? "100.0000%" : "";
-	const grouped = /* @__PURE__ */ new Map(), appendix = [];
+	const grouped = /* @__PURE__ */ new Map();
 	for (const charge of form.charges || []) {
 		const row = formatoRow(charge);
-		if (!row) {
-			appendix.push(charge);
-			continue;
-		}
+		if (!row) continue;
 		if (!grouped.has(row)) grouped.set(row, []);
 		grouped.get(row).push(charge);
 	}
@@ -36750,9 +36747,8 @@ function formatoValues(data) {
 		const udcs = [...new Set(charges.map((charge) => charge.udc).filter((value) => value != null))];
 		values[`F${row}`] = udcs.join(" / ");
 		const base = charges.reduce((total, charge) => total + (charge.block === "external" ? charge.amountUSDUnrounded ?? charge.amountUSD : charge.amountNIO / data.exchangeRate), 0);
-		if (row < 19 || udcs.length) values[`G${row}`] = Number(fob["US$"]) > 0 ? `${num$1(base / fob["US$"] * 100, 4)}%` : "";
+		if (row < 19 || udcs.length) values[`G${row}`] = Number(fob["US$"]) > 0 ? `${num(base / fob["US$"] * 100, 4)}%` : "";
 		if (row === 28 || row === 33) values[`C${row}`] = charges.map((charge) => charge.sourceReference || charge.reference || "").filter(Boolean).join(" / ");
-		if (charges.length > 1 || row === 15) appendix.push(...charges);
 	}
 	if (form.insuranceCircular) values.C33 = ["CT", values.C33].filter(Boolean).join(" / ");
 	const subtotal = (title) => rows.find((row) => row.Bloque === title && row.Concepto === "Subtotal") || {};
@@ -36765,28 +36761,21 @@ function formatoValues(data) {
 		values[`D${row}`] = money$2(source["US$"]);
 		values[`E${row}`] = money$2(source["C$"], "C$");
 	}
-	for (const [row, source] of [[16, external], [38, internment]]) values[`G${row}`] = Number(fob["US$"]) > 0 ? `${num$1((row === 38 ? Number(source["C$"] || 0) / data.exchangeRate : Number(source["US$"] || 0)) / fob["US$"] * 100, 4)}%` : "";
+	for (const [row, source] of [[16, external], [38, internment]]) values[`G${row}`] = Number(fob["US$"]) > 0 ? `${num((row === 38 ? Number(source["C$"] || 0) / data.exchangeRate : Number(source["US$"] || 0)) / fob["US$"] * 100, 4)}%` : "";
 	const total = rows.find((row) => row.Concepto === "Costo total") || {}, iva = rows.find((row) => row.Concepto === "IVA separado") || {};
 	values.F39 = money$2(Number(total["C$"] || 0) - Number(external["C$"] || 0), "C$");
 	values.F40 = money$2(total["C$"], "C$");
 	values.F41 = money$2(total["US$"]);
-	values.G39 = form.udcPercentage == null ? "" : `${num$1(form.udcPercentage, 4)}%`;
-	values.G40 = form.factor == null ? "" : `${num$1(form.factor * 100, 1)}%`;
+	values.G39 = form.udcPercentage == null ? "" : `${num(form.udcPercentage, 4)}%`;
+	values.G40 = form.factor == null ? "" : `${num(form.factor * 100, 1)}%`;
 	values.C41 = "IVA separado";
 	values.D41 = money$2(iva["US$"]);
 	values.E41 = money$2(iva["C$"], "C$");
-	return {
-		values,
-		appendix
-	};
+	return { values };
 }
 //#endregion
 //#region src/adapters/liquidacionFormatoPdf.js
 var clean$21 = (value) => String(value ?? "").replace(/[\u2010-\u2015\u2212]/g, "-").replace(/[^\x20-\x7E\xA0-\xFF\n]/g, " ");
-var num = (value, decimals = 2) => Number(value).toLocaleString("en-US", {
-	minimumFractionDigits: decimals,
-	maximumFractionDigits: decimals
-});
 var ink = (hex) => rgb(...hex.match(/../g).map((part) => parseInt(part, 16) / 255));
 var address = (value) => [value.charCodeAt(0) - 65, Number(value.slice(1)) - 1];
 async function generateLiquidacionFormatoPdf(data) {
@@ -36794,7 +36783,7 @@ async function generateLiquidacionFormatoPdf(data) {
 	pdf.setTitle("Reporte de Liquidación");
 	pdf.setAuthor("ATLAS · Demo local");
 	const normal = await pdf.embedFont(StandardFonts.Helvetica), bold = await pdf.embedFont(StandardFonts.HelveticaBold), italic = await pdf.embedFont(StandardFonts.HelveticaOblique);
-	const { values, appendix } = formatoValues(data), sx = liquidacionFormatoLayout_default.width / liquidacionFormatoLayout_default.columns.reduce((total, width) => total + width, 0), sy = .92;
+	const { values } = formatoValues(data), sx = liquidacionFormatoLayout_default.width / liquidacionFormatoLayout_default.columns.reduce((total, width) => total + width, 0), sy = .92;
 	const xs = [liquidacionFormatoLayout_default.left], ys = [liquidacionFormatoLayout_default.page[1] - liquidacionFormatoLayout_default.top];
 	for (const width of liquidacionFormatoLayout_default.columns) xs.push(xs.at(-1) + width * sx);
 	for (const height of liquidacionFormatoLayout_default.rowHeights) ys.push(ys.at(-1) - height * sy);
@@ -36864,10 +36853,6 @@ async function generateLiquidacionFormatoPdf(data) {
 		if (font.widthOfTextAtSize(shown, size) > maximum) {
 			while (shown.length && font.widthOfTextAtSize(`${shown}...`, size) > maximum) shown = shown.slice(0, -1);
 			shown += "...";
-			appendix.push({
-				concept: `${liquidacionFormatoLayout_default.labels[`${String.fromCharCode(64 + b.c)}${b.r + 1}`] || addr}: ${text}`,
-				header: true
-			});
 		}
 		const numeric = b.c >= 3 && b.r >= 11 && !["F18"].includes(addr), align = ["F7", "F18"].includes(addr) ? "right" : numeric ? b.c === 5 && b.r < 38 ? "center" : "right" : style.align;
 		const width = font.widthOfTextAtSize(shown, size), x = align === "center" ? b.x + (right - b.x - width) / 2 : align === "right" ? right - width - 2 : b.x + 2;
@@ -36908,41 +36893,6 @@ async function generateLiquidacionFormatoPdf(data) {
 			width: signature.width * scale,
 			height: signature.height * scale
 		});
-	}
-	if (appendix.length) {
-		let extra, y;
-		const begin = () => {
-			extra = pdf.addPage(liquidacionFormatoLayout_default.page);
-			y = 780;
-			extra.drawText("Detalle complementario de conceptos", {
-				x: 25,
-				y,
-				size: 13,
-				font: bold
-			});
-			y -= 22;
-		};
-		begin();
-		for (const charge of appendix) {
-			let rest = clean$21(charge.header ? charge.concept : `${charge.concept} | UDC ${charge.udc ?? "-"} | US$ ${num(charge.amountUSD)} | C$ ${num(charge.amountNIO)}${charge.source ? ` | ${charge.source}${charge.sourceVersion ? ` v${charge.sourceVersion}` : ""}` : ""}`);
-			while (rest) {
-				if (y < 60) begin();
-				let length = rest.length;
-				while (fontWidth(rest.slice(0, length)) > 540) length--;
-				extra.drawText(rest.slice(0, length), {
-					x: 25,
-					y,
-					size: 9,
-					font: normal
-				});
-				y -= 14;
-				rest = rest.slice(length);
-			}
-			y -= 5;
-		}
-	}
-	function fontWidth(text) {
-		return normal.widthOfTextAtSize(text, 9);
 	}
 	const bytes = await pdf.save();
 	return {
@@ -41744,6 +41694,7 @@ var earlyCommands = new Set([
 	"IMPORT_SAVE_SERVICE",
 	"IMPORT_UPDATE_SERVICE",
 	"IMPORT_REQUEST_SERVICE_PAYMENT",
+	"IMPORT_CANCEL_SERVICE_PAYMENT",
 	"IMPORT_ATTACH_SERVICE_SUPPORT"
 ]);
 var earlyShipmentCommand = (type) => earlyCommands.has(type);
@@ -41755,6 +41706,7 @@ var agencyServiceCommand = (type) => [
 	"IMPORT_SAVE_SERVICE",
 	"IMPORT_UPDATE_SERVICE",
 	"IMPORT_REQUEST_SERVICE_PAYMENT",
+	"IMPORT_CANCEL_SERVICE_PAYMENT",
 	"IMPORT_ATTACH_SERVICE_SUPPORT"
 ].includes(type);
 var RETURN_COMPRAS_UNAVAILABLE = "La devolución se habilita cuando Compras está Disponible y no existe otra devolución pendiente.";
@@ -43082,6 +43034,65 @@ function statementPaymentRows(state, statement, ledger) {
 	return rows;
 }
 //#endregion
+//#region src/modules/pagos/servicePaymentCorrection.js
+var REPLAY_LEGACY_SERVICE_PAYMENT_EDIT = Symbol("replayLegacyServicePaymentEdit");
+function servicePayment(state, service) {
+	if (!service) return null;
+	return state.payments?.find((payment) => payment.id === service.paymentId) || state.payments?.find((payment) => payment.applications?.some((row) => row.obligationId === service.id)) || null;
+}
+function servicePaymentForCorrection(state, payment) {
+	if (payment?.applications?.length !== 1 || payment.disbursements?.length || payment.jde?.status && payment.jde.status !== "pendiente") return null;
+	const balance = getPaymentBalances(payment);
+	if (balance.paidCents || balance.cancelledCents || balance.reservedCents <= 0) return null;
+	const [{ obligationId }] = payment.applications;
+	return state.expedientes.flatMap((exp) => exp.importaciones?.services || []).find((service) => service.id === obligationId && service.paymentId === payment.id && !service.noAdditionalPayment) || null;
+}
+var serviceCorrectionPending = (payment) => payment?.serviceCorrection?.status === "pendiente";
+var hasGetPayId = (payment) => Boolean(String(payment?.getpay?.reference || "").trim());
+var canCorrectService = (payment, role, actor) => /^admin/i.test(role || "") || !payment?.createdBy || payment.createdBy === actor;
+function pauseServicePayment(state, payment, action, { fromPagos = false, observation = "", documentId } = {}) {
+	if (!servicePaymentForCorrection(state, payment) || hasGetPayId(payment) !== fromPagos) throw new Error("La gestión ya cambió. Abre el seguimiento vigente para revisarla.");
+	const application = payment.applications[0];
+	const obligation = state.obligations.find((row) => row.id === application.obligationId);
+	const documentVersion = state.documents.find((doc) => doc.id === obligation?.documentId)?.versions?.at(-1)?.version;
+	const original = {
+		obligationId: application.obligationId,
+		number: obligation?.number,
+		documentId: obligation?.documentId,
+		documentVersion,
+		totalCents: obligation?.totalCents ?? Math.round((obligation?.total || 0) * 100)
+	};
+	return {
+		...payment,
+		invoiceReferences: [original],
+		serviceCorrection: { status: "pendiente" },
+		applications: [{
+			...application,
+			cancelled: application.amount,
+			cancelledCents: getPaymentBalances(payment).amountCents
+		}],
+		getpay: {
+			...payment.getpay,
+			status: fromPagos ? "devuelto" : "cancelado",
+			date: action.at,
+			observation
+		},
+		events: [...payment.events, {
+			id: action.id || payment.id + "-correccion-" + payment.events.length,
+			action: fromPagos ? "servicio_devuelto" : "servicio_seguimiento_cancelado",
+			at: action.at,
+			actor: action.actor,
+			data: {
+				reference: payment.getpay?.reference,
+				observation,
+				documentId: documentId || payment.getpay?.documentId
+			},
+			applications: payment.applications,
+			serviceDocument: original
+		}]
+	};
+}
+//#endregion
 //#region src/modules/pagos/reducer.js
 function getPayment(state, id = "PAG-1011") {
 	const payment = state.payments.find((item) => item.id === id);
@@ -43571,6 +43582,7 @@ function applyPaymentAction(state, action) {
 		requireCondition(Array.isArray(requested) && requested.length, "Seleccione un documento e importe para reservar.");
 		if (p.source === "agrupado") requireCondition(requested.length >= 2, "Seleccione al menos dos documentos para un seguimiento agrupado.");
 		requireCondition(new Set(requested.map((item) => item.obligationId)).size === requested.length, "No duplique un documento dentro de la misma gestión.");
+		requireCondition(!state.payments.some((payment) => serviceCorrectionPending(payment) && payment.applications.some((row) => requested.some((item) => item.obligationId === row.obligationId))), "La factura está en corrección. Reactiva el seguimiento existente desde Servicios.");
 		const obligations = requested.map((item) => state.obligations.find((record) => record.id === item.obligationId));
 		requireCondition(obligations.every(Boolean), "Una factura seleccionada no existe.");
 		requireCondition(obligations.every((item) => !item.supersededByInvoiceId), "La proforma ya tiene factura vinculada; solicita el pago sobre la factura.");
@@ -43680,6 +43692,13 @@ function applyPaymentAction(state, action) {
 	const payment = getPayment(state, p.paymentId);
 	const eventId = action.id || `${payment.id}-EV-${payment.events.length + 1}`;
 	if (action.id && payment.events.some((item) => item.id === action.id)) return true;
+	if (serviceCorrectionPending(payment) && [
+		"PAY_UPDATE_FOLLOWUP",
+		"PAY_UPDATE_GETPAY",
+		"PAY_UPDATE_JDE",
+		"PAY_RECORD_DISBURSEMENT",
+		"PAY_CANCEL_REMAINDER"
+	].includes(action.type)) throw new Error("La factura está en corrección. Espera a que Importaciones reactive el seguimiento.");
 	switch (action.type) {
 		case "PAY_UPDATE_FOLLOWUP": {
 			const registrationOnly = p.status === void 0;
@@ -43691,6 +43710,19 @@ function applyPaymentAction(state, action) {
 				expedienteIds: payment.expedienteIds,
 				metadata: { paymentId: payment.id }
 			}, action).documentId;
+			if (p.returnServiceReference) {
+				requireCondition(registrationOnly && !String(p.reference || "").trim() && payment.getpay?.reference === p.returnServiceReference, "La referencia de GetPay cambió. Abre de nuevo el seguimiento.");
+				const observation = requiredText(p.observation, "Observación de la pausa o liberación en GetPay");
+				Object.assign(payment, pauseServicePayment(state, payment, {
+					...action,
+					id: eventId
+				}, {
+					fromPagos: true,
+					observation,
+					documentId
+				}));
+				break;
+			}
 			payment.getpay = {
 				...payment.getpay,
 				...registrationOnly ? {} : { status: p.status },
@@ -44997,11 +45029,15 @@ function buildAgencyEmail(exp, data = exp.importaciones, state) {
 		cc: [...new Set([...emailList(contacts.cc), ...emailList(contacts.importerEmail)])]
 	};
 }
-function buildReleaseSubject(exp, declaration = exp.importaciones?.nationalization?.declaration, group) {
+function buildReleaseSubject(exp, declaration = exp.importaciones?.nationalization?.declaration, group, includeExpediente = true) {
 	const data = exp.importaciones || {}, packages = data.shipment?.packages;
 	const reference = text$5(declaration).replace(/^L[\s-]+(?=\d)/i, "L-");
-	if (group) return `Declaración ${reference || "Por confirmar"} - Embarque ${group.shipmentDocument}`;
+	if (group) return `Declaración ${reference || "Por confirmar"} - Embarque ${group.shipmentDocument}${includeExpediente ? ` - ${exp.id}` : ""}`;
 	return `Declaración ${reference || "Por confirmar"} - OI ${data.oiNumber || "Por confirmar"} - ${exp.id} - ${packages === "" || packages == null ? "Por confirmar" : packages}  Bultos - ${text$5(exp.supplier) || "Por confirmar"}`;
+}
+function buildReleaseMessage(exp, releaseDate, group, observation) {
+	const reference = group?.shipmentDocument || shipmentReference(exp);
+	return `Se informa la liberación aduanera del ${formatLocalDate(releaseDate)}. Documento de embarque ${reference}.${group ? ` ID del expediente ${exp.id}.` : ""}${text$5(observation) ? ` ${text$5(observation)}` : ""}`;
 }
 function importArticleRows(exp) {
 	const source = exp.importaciones?.review?.sources?.sia?.rows || importInvoice(exp)?.lines || exp.compras?.lines || exp.articles || [];
@@ -45155,16 +45191,16 @@ function costeoDeliveryDocuments(state, exp, payload, legacy = false) {
 		if (!confirmed?.documentId) continue;
 		const current = kind === "result" ? [data.review.computedResult, data.review.externalResult].find((source) => source?.documentId === confirmed.documentId) : kind === "external" ? data.review.externalResult : kind === "boletin" ? data.review.boletin : data.review.sources[kind];
 		const documentVersion = state.documents.find((document) => document.id === confirmed.documentId)?.versions.at(-1)?.version;
-		if (!current || current.documentId !== confirmed.documentId || current.version !== confirmed.version || documentVersion !== confirmed.version) throw new Error("La revisión corresponde a fuentes anteriores. Confirma las versiones vigentes antes de entregar.");
+		if (!current || current.documentId !== confirmed.documentId || current.version !== confirmed.version || documentVersion != null && documentVersion !== confirmed.version) throw new Error("La revisión corresponde a fuentes anteriores. Confirma las versiones vigentes antes de entregar.");
 	}
-	const requiredIds = [...new Set([
+	const requestedIds = new Set([
 		...p.requiredDocumentIds || [],
 		...SOURCE_KINDS.map((kind) => data.review.sources[kind]?.documentId),
-		...Object.values(confirmedSources).map((source) => source?.documentId).filter(Boolean)
-	])];
-	if (!p.invoiceDocumentId) throw new Error("Selecciona la factura del alcance de entrega.");
-	requiredIds.push(p.invoiceDocumentId);
-	if (requiredIds.some((id) => !id || !hasDocument(state, id) || !state.documents.find((document) => document.id === id)?.expedienteIds?.includes(exp.id))) throw new Error("Completa los documentos requeridos del alcance antes de entregar.");
+		...Object.values(confirmedSources).map((source) => source?.documentId),
+		p.invoiceDocumentId ?? invoice?.documentId
+	]);
+	const availableIds = new Set((state.documents || []).filter((document) => document.versions?.length && document.expedienteIds?.includes(exp.id)).map((document) => document.id));
+	const requiredIds = [...requestedIds].filter((id) => availableIds.has(id));
 	return {
 		invoiceId: required$2(p.invoiceId || importInvoice(exp)?.id || (legacy ? "FAC-002" : ""), "Selecciona la factura del alcance de entrega"),
 		requiredIds
@@ -45278,6 +45314,7 @@ function reduceImportaciones(state, action) {
 		return result;
 	};
 	const documentIds = new Set(exp.documents || []);
+	const releaseNoticesByMember = /* @__PURE__ */ new Map();
 	function saveServiceShipment(expedienteIds) {
 		if (expedienteIds.length < 2 || !p.shipmentConsolidation) return;
 		if (text$5(p.shipmentReference) && text$5(p.shipmentReference) !== shipmentReference(exp)) throw Error("El documento de embarque del servicio debe coincidir con el del expediente.");
@@ -45967,13 +46004,27 @@ function reduceImportaciones(state, action) {
 			notice(p.noAdditionalPayment ? "Documento registrado sin pago adicional" : "Factura de servicio registrada", `${number}: ${currency} ${amount.toFixed(2)}.${p.noAdditionalPayment ? " Sin pago adicional." : automatic ? ` Seguimiento ${paymentId}.` : " Sin seguimiento solicitado."}`, automatic ? "Pagos" : "Importaciones");
 			break;
 		}
+		case "IMPORT_CANCEL_SERVICE_PAYMENT": {
+			const service = data.services.find((item) => item.id === p.serviceId);
+			const payment = servicePayment(next, service);
+			if (!service || !payment || payment.id !== p.paymentId || !canCorrectService(payment, action.role, stamp.actor)) throw new Error("Solo quien solicitó el seguimiento puede cancelarlo para corregir la factura.");
+			const paused = pauseServicePayment(next, payment, action);
+			next = {
+				...next,
+				payments: next.payments.map((item) => item.id === payment.id ? paused : item)
+			};
+			break;
+		}
 		case "IMPORT_REQUEST_SERVICE_PAYMENT": {
 			const service = data.services.find((item) => item.id === p.serviceId);
 			if (!service) throw new Error("No se encontró la factura de servicio.");
 			if (service.noAdditionalPayment) throw new Error("El documento está registrado sin pago adicional; no permite solicitar seguimiento de pago mientras esa opción esté marcada.");
 			const previous = next.payments.find((item) => item.id === service.paymentId);
+			const reactivating = serviceCorrectionPending(previous);
+			if (reactivating && (!canCorrectService(previous, action.role, stamp.actor) || p.reactivatePaymentId !== previous.id)) throw new Error("Abre la solicitud de nuevo con el usuario que originó el seguimiento.");
+			if (!reactivating && p.reactivatePaymentId) return state;
 			const revolving = revolvingPaymentRule(action)(next, service);
-			if (service.paymentId && !revolving) return state;
+			if (service.paymentId && !revolving && !reactivating) return state;
 			if (previous && getPaymentBalances(previous).reservedCents > 0) throw new Error("Ya existe una gestión pendiente para esta factura de servicio.");
 			const amount = roundService(positive(p.amount, "Importe solicitado"));
 			const obligation = next.obligations.find((item) => item.id === service.id) || {
@@ -45989,23 +46040,47 @@ function reduceImportaciones(state, action) {
 			};
 			let n = 1011;
 			while (next.payments.some((item) => item.id === `PAG-${n}`)) n++;
-			const paymentId = `PAG-${n}`;
-			next = reduceFinance(next, {
+			const paymentId = reactivating ? previous.id : `PAG-${n}`;
+			next = reduceFinance(reactivating ? {
+				...next,
+				payments: next.payments.filter((item) => item.id !== paymentId)
+			} : next, {
 				...action,
 				type: "PAY_CREATE",
 				payload: {
 					id: paymentId,
 					source: "importaciones",
-					sourceKey: `service:${service.id}${previous ? ":" + previous.id : ""}`,
+					sourceKey: reactivating ? previous.sourceKey : `service:${service.id}${previous ? ":" + previous.id : ""}`,
 					obligation,
 					allocations: [{
 						obligationId: service.id,
 						amount
 					}],
 					responsible: required$2(p.responsible, "Responsable de seguimiento"),
+					comments: p.comments,
+					file: p.file,
 					revolvingException: p.revolvingException
 				}
 			});
+			if (reactivating) next = {
+				...next,
+				payments: next.payments.map((item) => item.id !== paymentId ? item : {
+					...item,
+					createdBy: previous.createdBy || item.createdBy,
+					createdAt: previous.createdAt || item.createdAt,
+					initialGetpay: previous.initialGetpay,
+					documentId: item.documentId || previous.documentId,
+					supportRequests: previous.supportRequests || item.supportRequests,
+					...previous.dueDate && {
+						dueDate: previous.dueDate,
+						dueTerms: previous.dueTerms
+					},
+					events: [...previous.events, ...item.events.map((event) => ({
+						...event,
+						action: "servicio_seguimiento_reactivado"
+					}))]
+				})
+			};
 			data = {
 				...data,
 				services: data.services.map((item) => item.id === service.id ? {
@@ -46074,15 +46149,17 @@ function reduceImportaciones(state, action) {
 		case "IMPORT_UPDATE_SERVICE": {
 			const original = data.services.find((service) => service.id === p.serviceId);
 			if (!original) throw new Error("La factura de servicio no está disponible.");
-			const payment = next.payments.find((item) => item.id === original.paymentId);
+			const payment = servicePayment(next, original);
 			const hasPaymentRequest = serviceHasPaymentRequest(next, original);
+			const correcting = serviceCorrectionPending(payment);
 			if (p.noAdditionalPayment && hasPaymentRequest) throw new Error("La factura ya tiene seguimiento de pago. Se conserva su gestión; no puede convertirse en boletín.");
-			if (original.paymentId && (!payment || payment.getpay?.status !== "sin_id" || payment.jde?.status !== "pendiente" || payment.applications.some((item) => item.paid > 0 || item.cancelled > 0) || payment.disbursements?.length)) throw new Error("La factura tiene una gestión financiera avanzada. Consulta el seguimiento antes de modificarla.");
+			if (hasPaymentRequest && !action[REPLAY_LEGACY_SERVICE_PAYMENT_EDIT] && (!correcting || !canCorrectService(payment, action.role, stamp.actor))) throw new Error("El servicio está en seguimiento de pago. Cancela o solicita a Pagos que lo devuelva para corregirlo.");
+			if (!correcting && original.paymentId && (!payment || payment.getpay?.status !== "sin_id" || payment.jde?.status !== "pendiente" || payment.applications.some((item) => item.paid > 0 || item.cancelled > 0) || payment.disbursements?.length)) throw new Error("La factura tiene una gestión financiera avanzada. Consulta el seguimiento antes de modificarla.");
 			const supplier = required$2(p.supplier, "Proveedor"), number = required$2(p.number, "Número de factura");
 			const currency = currencyCode(required$2(p.currency, "Moneda"));
 			const currencyChanged = currency !== currencyCode(original.currency);
 			const identityChanged = supplier !== original.supplier || number !== original.number || currencyChanged;
-			if (hasPaymentRequest && identityChanged) throw new Error("La factura ya tiene seguimiento de pago. Conserva proveedor, número y moneda.");
+			if (hasPaymentRequest && identityChanged && !correcting) throw new Error("La factura ya tiene seguimiento de pago. Conserva proveedor, número y moneda.");
 			if (supplier !== original.supplier && p.supplierId && !supplierDirectory(state).some((row) => row.type === "service" && row.enabled && row.record.id === p.supplierId && row.record.label === supplier)) throw new Error("Vuelve a seleccionar el proveedor de servicios.");
 			if (currencyChanged && !acceptsRecordedCurrency(state, currency)) throw new Error("Selecciona una moneda de servicio activa del catálogo.");
 			const foreignCurrency = !["NIO", "USD"].includes(currency);
@@ -46125,7 +46202,7 @@ function reduceImportaciones(state, action) {
 			} : p.file;
 			requireFile(file, [".pdf"]);
 			saveServiceShipment(expedienteIds);
-			if (!original.insurancePolicy && previousVersion?.blob !== file.blob) addDocument({
+			if (!original.insurancePolicy && (correcting || previousVersion?.blob !== file.blob)) addDocument({
 				id: original.documentId,
 				expedienteIds,
 				type: "Factura de servicio",
@@ -46157,15 +46234,20 @@ function reduceImportaciones(state, action) {
 					totalCents: money$1(amount),
 					concepts,
 					expedienteIds
-				} : item),
-				payments: next.payments.map((item) => item.id === original.paymentId ? {
+				} : item)
+			};
+			if (payment && original.paymentId) next = {
+				...next,
+				payments: next.payments.map((item) => item.id === payment.id ? {
 					...item,
-					expedienteIds,
-					applications: item.applications.map((application) => application.obligationId === original.id ? {
-						...application,
-						amount,
-						amountCents: money$1(amount)
-					} : application),
+					...!correcting && {
+						expedienteIds,
+						applications: item.applications.map((application) => application.obligationId === original.id ? {
+							...application,
+							amount,
+							amountCents: money$1(amount)
+						} : application)
+					},
 					events: [...item.events, {
 						id: action.id,
 						action: "factura_servicio_actualizada",
@@ -46375,10 +46457,25 @@ function reduceImportaciones(state, action) {
 			}
 			const recipients = [...LIBERATION_RECIPIENTS];
 			const declaration = p.declaration ?? p.reference ?? data.nationalization.declaration;
-			const subject = buildReleaseSubject({
+			const perExpedienteNotice = Boolean(group && p.perExpedienteNotice);
+			const releaseNoticeFor = (member) => ({
+				recipients,
+				subject: buildReleaseSubject(member, declaration, group),
+				body: buildReleaseMessage(member, date, group, p.observation),
+				...stamp
+			});
+			const selectedNotice = releaseNoticeFor({
 				...exp,
 				importaciones: data
-			}, declaration, group);
+			});
+			const releaseNotice = perExpedienteNotice ? selectedNotice : {
+				recipients,
+				subject: buildReleaseSubject({
+					...exp,
+					importaciones: data
+				}, declaration, group, false),
+				...stamp
+			};
 			data = {
 				...data,
 				nationalization: group ? data.nationalization : {
@@ -46392,15 +46489,16 @@ function reduceImportaciones(state, action) {
 					...group && { declaration: text$5(declaration) },
 					observation: text$5(p.observation),
 					documentId,
-					notices: [...data.release.notices, {
-						recipients,
-						subject,
-						...stamp
-					}],
+					notices: [...data.release.notices, releaseNotice],
 					...stamp
 				}
 			};
-			recipients.forEach((recipient) => notice("Liberación registrada", `${data.shipment.reference}: ${text$5(p.observation)}`, recipient, [recipient], { subject }));
+			if (perExpedienteNotice) for (const member of members) {
+				const message = member.id === exp.id ? releaseNotice : releaseNoticeFor(member);
+				releaseNoticesByMember.set(member.id, message);
+				next = addNotice(next, action, member.id, "Liberación registrada", message.body, "Importaciones", recipients, { subject: message.subject });
+			}
+			else recipients.forEach((recipient) => notice("Liberación registrada", `${data.shipment.reference}: ${text$5(p.observation)}`, recipient, [recipient], { subject: releaseNotice.subject }));
 			break;
 		}
 		case "IMPORT_SAVE_SCHEDULE": {
@@ -46491,14 +46589,21 @@ function reduceImportaciones(state, action) {
 		expedientes: next.expedientes.map((item) => {
 			if (item.id === exp.id) return updated;
 			if (!group?.expedienteIds.includes(item.id)) return item;
-			if (action.type === "IMPORT_CONFIRM_RELEASE") return {
-				...item,
-				documents: [...new Set([...item.documents || [], ...[data.release.documentId].filter(Boolean)])],
-				importaciones: {
-					...item.importaciones,
-					release: structuredClone(data.release)
-				}
-			};
+			if (action.type === "IMPORT_CONFIRM_RELEASE") {
+				const memberNotice = releaseNoticesByMember.get(item.id);
+				const release = memberNotice ? {
+					...data.release,
+					notices: [...item.importaciones.release?.notices || [], memberNotice]
+				} : data.release;
+				return {
+					...item,
+					documents: [...new Set([...item.documents || [], ...[release.documentId].filter(Boolean)])],
+					importaciones: {
+						...item.importaciones,
+						release: structuredClone(release)
+					}
+				};
+			}
 			if (!groupAgency) return item;
 			const sharedAgency = shipmentAgencySettings(data.agency), notices = data.agency.notices, imp = importState(item);
 			const docId = action.type === "IMPORT_ATTACH_DOCUMENT" ? [...documentIds].findLast((id) => !exp.documents?.includes(id)) : null;
@@ -47919,6 +48024,7 @@ function parseTariffWorksheet(sheet, { kind, oiNumber = "" } = {}) {
 			kind,
 			oiNumber
 		});
+		if (kind === "sia") normalized.article = normalizeTariffCode(normalized.article);
 		if (incompleteJdeArticle) {
 			normalized.sourceMissingFields = ["article"];
 			normalized.sourceWarning = "Código Proveedor vacío en el original; equivalencia de artículo pendiente.";
@@ -107231,6 +107337,7 @@ var followupActionLabels = {
 	COST18_NOTICE: "Aviso de costeo registrado",
 	COST18_REGISTER_RULE: "Regla validada en JDE registrada",
 	COST18_FINALIZE: "Costeo finalizado y entregado a Contabilidad",
+	COST18_REMOVE_RULE: "Regla retirada de la OI",
 	COST18_SUPPORT: "Soporte de costeo agregado",
 	COST18_AVAILABILITY: "Disponibilidad JDE verificada",
 	COST18_CONFIRM_AVAILABILITY: "Disponibilidad de regla espejo confirmada",
@@ -114707,14 +114814,9 @@ function costeoTaxResult(exp) {
 	const review = exp.importaciones?.review || {};
 	return review.mode === "external" ? review.evaluatedResult || review.externalResult : review.computedResult || review.externalResult;
 }
-function costeoDeliveryFiscal(state, exp, options = {}) {
-	const result = costeoTaxResult(exp);
-	if (!result?.rows?.length) return null;
-	const fiscal = fiscalVatSnapshot(exp, options);
-	const validVersion = ({ documentId, version }, needsFile = false) => state.documents.some((doc) => doc.id === documentId && doc.versions.some((entry) => entry.version === version && (!needsFile || entry.blob?.size)));
-	requireCondition(validVersion(result), "El resultado arancelario entregado no existe como documento versionado.");
-	requireCondition(fiscal.evidence.every((row) => validVersion(row, true)), "El IVA fiscal debe conservar su documento individual y la versión entregada.");
-	return fiscal;
+function costeoDeliveryFiscal(exp, options = {}) {
+	if (!costeoTaxResult(exp)?.rows?.length) return null;
+	return fiscalVatSnapshot(exp, options);
 }
 function externalTaxSnapshot(exp, at, fiscalVat) {
 	const review = exp.importaciones?.review || {}, source = costeoTaxResult(exp);
@@ -114806,7 +114908,7 @@ function syncCosteoImportPackage(previous, next, action) {
 	const id = action.payload?.expedienteId;
 	const sourceExp = next.expedientes.find((exp) => exp.id === id);
 	if (!sourceExp) return next;
-	const fiscalVat = costeoDeliveryFiscal(next, sourceExp, { legacyVat });
+	const fiscalVat = costeoDeliveryFiscal(sourceExp, { legacyVat });
 	if (!fiscalVat) return next;
 	const snapshot = externalTaxSnapshot(sourceExp, action.at, fiscalVat);
 	const state = initializeCosteoFollowup(next, legacyVat, legacySources), exp = expFor(state, id), followup = exp.costeo.followup;
@@ -114951,7 +115053,6 @@ function costeoCalculationProblems(state, reference, { showClassification = true
 		}
 		if (!costEntryReady(state, exp)) problems.push("Importaciones debe entregar el paquete vigente de factura, OI, SIA y preliquidación.");
 	}
-	if (h1.fiscalVatPending) problems.push("Completa o concilia el IVA fiscal individual de esta OI en Importaciones.");
 	if (!(Number(h1.exchangeRate) > 0)) problems.push("Configura un tipo de cambio global positivo.");
 	if (!(Number(h1.fob) > 0)) problems.push("El FOB debe ser mayor que cero.");
 	for (const charge of h1.charges || []) {
@@ -115191,6 +115292,14 @@ function mirrorRegistrationChoices(state, exp) {
 		available,
 		occupied
 	};
+}
+function hasLocalMirrorReservation(state, exp) {
+	const code = String(exp.costeo?.followup?.ruleId || "").toUpperCase();
+	return Boolean(code) && (state.mirrorRules?.some((row) => row.expedienteId === exp.id && String(row.ruleId).toUpperCase() === code && [
+		"reserved",
+		"applied",
+		"occupied"
+	].includes(row.status)) || state.reservations?.some((row) => row.type === "cost-rule" && row.expedienteId === exp.id && String(row.ruleId).toUpperCase() === code && row.status === "occupied"));
 }
 function initializeObservedMirrorAvailability(state, dataset) {
 	if (!dataset.mirrorAvailability) return state;
@@ -115775,7 +115884,6 @@ function reduceCosteoFollowup(source, action) {
 				const item = expFor(state, id);
 				ensureEditable(item.costeo.followup);
 				requireCondition(costEntryReady(state, item), "Importaciones debe entregar el paquete de factura, OI, SIA y preliquidación antes del costeo.");
-				requireCondition(!item.costeo.followup.draft?.fiscalVatPending, "Falta el IVA fiscal individual de esta OI; el total consolidado no puede repetirse en los H1 individuales.");
 			}
 			requireCondition(!owner.draft.exchangeRateCorrection || canCorrectRate, "Solo Admin o Jefe de Importaciones puede confirmar la corrección del tipo de cambio histórico.");
 			if (group) {
@@ -115853,7 +115961,8 @@ function reduceCosteoFollowup(source, action) {
 					expedienteId,
 					amount: amount(memberVat.get(expedienteId).ivaUSD)
 				}));
-				const ivaRows = originIva.reduce((sum, row) => sum + toCents(row.amount), 0) === toCents(closed.ivaUSD) ? originIva : apportioned(toCents(closed.ivaUSD), weights, ids);
+				const hasPendingVat = [...memberVat.values()].some((row) => row.fiscalVatPending);
+				const ivaRows = hasPendingVat || originIva.reduce((sum, row) => sum + toCents(row.amount), 0) === toCents(closed.ivaUSD) ? originIva : apportioned(toCents(closed.ivaUSD), weights, ids);
 				const originIvaNIO = ids.map((expedienteId) => ({
 					expedienteId,
 					amount: memberVat.get(expedienteId).ivaNIO
@@ -115914,6 +116023,7 @@ function reduceCosteoFollowup(source, action) {
 						insuranceCircular: hasCircularInsurance(state, [id]),
 						reportHeader: reportHeader(item, null, draft.reportDetails, actor),
 						vatSources: clone$1(vatSource.vatSources || []),
+						fiscalVatPending: Boolean(vatSource.fiscalVatPending),
 						blockTotals,
 						version,
 						groupVersion: nextVersion,
@@ -115950,7 +116060,7 @@ function reduceCosteoFollowup(source, action) {
 					target.status = "calculated";
 					invalidateApplication(target);
 				}
-				const vatNIO = originIvaNIO.reduce((sum, row) => sum + toCents(row.amount), 0) === toCents(closed.ivaNIO) ? originIvaNIO : closed.ivaNIO ? apportioned(toCents(closed.ivaNIO), ids.map((id) => ivaRows.find((row) => row.expedienteId === id).amount), ids) : ids.map((expedienteId) => ({
+				const vatNIO = hasPendingVat || originIvaNIO.reduce((sum, row) => sum + toCents(row.amount), 0) === toCents(closed.ivaNIO) ? originIvaNIO : closed.ivaNIO ? apportioned(toCents(closed.ivaNIO), ids.map((id) => ivaRows.find((row) => row.expedienteId === id).amount), ids) : ids.map((expedienteId) => ({
 					expedienteId,
 					amount: 0
 				}));
@@ -116154,12 +116264,29 @@ function reduceCosteoFollowup(source, action) {
 			});
 			break;
 		}
-		case "COST18_REGISTER_RULE": {
+		case "COST18_REGISTER_RULE":
+		case "COST18_REMOVE_RULE": {
 			requireCondition(followup && current(followup) && oiFor(exp), "Calcula la liquidación de la OI antes de registrar la regla.");
 			requireCondition(!followup.finalizedAt && !followup.releasedAt, "Esta OI ya está cerrada.");
 			requireCondition(!followup.draft && !followup.pendingTaxSnapshot && !followup.pendingServiceSnapshot && !getCosteoGroup(state, exp.id)?.draft, "Calcula la liquidación con las fuentes vigentes.");
 			const attempt = attemptFor(followup);
-			requireCondition(!attempt || attempt.version !== current(followup).version, "La comprobación vigente ya tiene una regla registrada.");
+			const currentAttempt = attempt?.version === current(followup).version ? attempt : null;
+			requireCondition(!currentAttempt?.ruleId, "La comprobación vigente ya tiene una regla registrada.");
+			if (action.type === "COST18_REMOVE_RULE") {
+				const priorRuleId = followup.ruleId;
+				requireCondition(priorRuleId && String(priorRuleId).toUpperCase() === p.expectedRuleId, "La regla cambió. Vuelve a abrir el selector.");
+				requireCondition(!hasLocalMirrorReservation(state, exp), "La OI tiene una reserva vigente para esta regla.");
+				followup.ruleHistory = [...followup.ruleHistory || [], {
+					id: action.id,
+					ruleId: null,
+					priorRuleId,
+					oiNumber: oiFor(exp),
+					actor,
+					at
+				}];
+				followup.ruleId = null;
+				break;
+			}
 			const ruleId = requiredText(p.ruleId, "Regla validada en JDE").toUpperCase();
 			requireCondition(ruleId.length <= 50 && !/[\r\n\t]/.test(ruleId), "Ingresa un código de regla de JDE válido.");
 			if (p.catalogSelection === true) {
@@ -116177,6 +116304,7 @@ function reduceCosteoFollowup(source, action) {
 				at
 			}];
 			followup.ruleId = ruleId;
+			if (currentAttempt) currentAttempt.ruleId = ruleId;
 			break;
 		}
 		case "COST18_RESERVE_RULE": {
@@ -116362,7 +116490,7 @@ function reduceCosteoFollowup(source, action) {
 				} else ensureEditable(followup);
 				requireCondition(version && p.version === version.version, "Recarga la versión calculada antes de cargar el resultado JDE.");
 				requireCondition(!followup.draft && !followup.pendingServiceSnapshot && !followup.pendingTaxSnapshot, "Revalida las fuentes vigentes antes de cargar el resultado JDE.");
-				requireCondition(followup.ruleId, "Registra la regla validada en JDE para esta OI.");
+				requireCondition(comparisonUpload || followup.ruleId, "Registra la regla validada en JDE para esta OI.");
 				requireCondition(replacing || canStartJdeAttempt(followup.attempts.at(-1), version), "La corrección requiere revisar el intento anterior y calcular una versión nueva.");
 				requireCondition(p.file?.oi && String(p.file.oi) === oiFor(exp), "El Excel debe identificar la OI de este expediente.");
 				const number = followup.attempts.length + 1;
@@ -116371,7 +116499,7 @@ function reduceCosteoFollowup(source, action) {
 					number,
 					version: version.version,
 					oiNumber: oiFor(exp),
-					ruleId: followup.ruleId,
+					ruleId: followup.ruleId || null,
 					actor,
 					executedAt: null,
 					execution: "Resultado cargado desde JDE"
@@ -117935,6 +118063,10 @@ async function prepareEntry(action, ui, storeAttachment, after) {
 		...currentAction,
 		transportRolePolicy: TRANSPORT_ROLE_POLICY
 	};
+	if (action.type === "IMPORT_UPDATE_SERVICE") currentAction = {
+		...currentAction,
+		servicePaymentCorrectionPolicy: 1
+	};
 	const entry = {
 		version: 1,
 		action: await encode(currentAction, storeAttachment),
@@ -117977,6 +118109,7 @@ function applyJournalEntries(state, entries) {
 		if (action.type === "IMPORT_SAVE_SERVICE" && !action.insuranceServicePolicy) action[REPLAY_LEGACY_INSURANCE_SERVICE] = true;
 		if (action.type === "IMPORT_SAVE_SERVICE" && !action.serviceInvoiceScopePolicy) action[REPLAY_LEGACY_SERVICE_INVOICE] = true;
 		if (action.type.startsWith("TRANSPORT_") && !action.transportRolePolicy) action[REPLAY_LEGACY_TRANSPORT_ROLE] = true;
+		if (action.type === "IMPORT_UPDATE_SERVICE" && !action.servicePaymentCorrectionPolicy) action[REPLAY_LEGACY_SERVICE_PAYMENT_EDIT] = true;
 		state = sessionReducer(before, action);
 	}
 	return state;
@@ -118000,7 +118133,7 @@ function restoreJournalUI(initial, state, { pendingReplay = false } = {}) {
 }
 //#endregion
 //#region src/adapters/web/startupRead.js
-var webCheckpointContract = "e54d6739dbec89e6a118142a22ae0c6f50b836da761aef1fd3a5871389a41591";
+var webCheckpointContract = "64b590501cc6c6c47adede96ccc9ff4d19b99c953dcc7370ee5beb972258b6ee";
 var startupRequest;
 function stateReadPath(simple, contract) {
 	const params = new URLSearchParams();
@@ -118563,6 +118696,8 @@ var knownImportActions = new Set([
 	"IMPORT_SAVE_SERVICE",
 	"IMPORT_SET_INSURANCE",
 	"IMPORT_UPDATE_SERVICE",
+	"IMPORT_CANCEL_SERVICE_PAYMENT",
+	"IMPORT_REQUEST_SERVICE_PAYMENT",
 	"IMPORT18_SET_TARIFF_OPTIONS",
 	"IMPORT_CONFIRM_RELEASE",
 	"IMPORT18_CONFIRM_REVIEW",
@@ -119911,7 +120046,7 @@ var checkpointAssetBase = "/demo-app-importaciones-cp/";
 var checkpointProcessorContract = webCheckpointContract;
 async function buildStartupCheckpoint(state, readPublishedAsset) {
 	const prior = state.checkpoint;
-	if (!Number.isSafeInteger(state.revision) || state.revision < 1 || !Array.isArray(state.actions) || prior && prior.contract !== "e54d6739dbec89e6a118142a22ae0c6f50b836da761aef1fd3a5871389a41591" || (prior?.revision || 0) + state.actions.length !== state.revision) throw Error("No se puede consolidar una revisión incompleta.");
+	if (!Number.isSafeInteger(state.revision) || state.revision < 1 || !Array.isArray(state.actions) || prior && prior.contract !== "64b590501cc6c6c47adede96ccc9ff4d19b99c953dcc7370ee5beb972258b6ee" || (prior?.revision || 0) + state.actions.length !== state.revision) throw Error("No se puede consolidar una revisión incompleta.");
 	const [initial, journal] = await Promise.all([prepareStartupSession({
 		designVersion: "v18",
 		deferArticleMaster: true,
