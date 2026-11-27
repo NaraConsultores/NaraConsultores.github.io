@@ -1478,7 +1478,7 @@ function requireCondition(condition, message, code = "VALIDACION_DEMO") {
 		throw error;
 	}
 }
-function money$2(value, { positive = false, label = "Importe" } = {}) {
+function money$3(value, { positive = false, label = "Importe" } = {}) {
 	const parsed = typeof value === "string" ? Number(value.replace(/(?:US\$|USD|C\$|NIO|\s|,)/g, "")) : Number(value);
 	requireCondition(Number.isFinite(parsed) && (positive ? parsed > 0 : parsed >= 0), `${label}: indique un número ${positive ? "mayor que cero" : "no negativo"}.`);
 	return roundMoney(parsed);
@@ -2211,8 +2211,8 @@ var PEDIDOS_HEADERS = [
 //#endregion
 //#region src/modules/compras/pedidosJde.js
 var PEDIDOS_LAYOUT = "pedidos-jde-v1";
-var clean$22 = (value) => String(value ?? "").trim();
-var code$1 = (value) => clean$22(value).replace(/^0+(?=\d)/, "");
+var clean$23 = (value) => String(value ?? "").trim();
+var code$1 = (value) => clean$23(value).replace(/^0+(?=\d)/, "");
 var supportedTypes = [
 	"OC",
 	"OP",
@@ -2239,22 +2239,22 @@ var columns$2 = {
 };
 PEDIDOS_HEADERS.map(normalizeHeader);
 var isPedidoLine = (row) => row?.nativeJde?.format === PEDIDOS_LAYOUT;
-var pedidoCurrency = (value) => clean$22(value).toUpperCase() === "COR" ? "NIO" : clean$22(value).toUpperCase();
+var pedidoCurrency = (value) => clean$23(value).toUpperCase() === "COR" ? "NIO" : clean$23(value).toUpperCase();
 function pedidoInScope(cells, context) {
 	return code$1(cells[columns$2.company]) === code$1(context.referenceCompanyCode) && code$1(cells[columns$2.supplier]) === code$1(context.referenceSupplierCode) && (!context.currency || pedidoCurrency(cells[columns$2.currency]) === pedidoCurrency(context.currency));
 }
 function requirePedidoScope(context) {
-	if (!clean$22(context.referenceCompanyCode) || !clean$22(context.referenceSupplierCode)) throw Error("Para cargar Pedidos JDE, confirma el código JDE de la compañía y del proveedor del expediente.");
+	if (!clean$23(context.referenceCompanyCode) || !clean$23(context.referenceSupplierCode)) throw Error("Para cargar Pedidos JDE, confirma el código JDE de la compañía y del proveedor del expediente.");
 }
 function decimal(value, label, location) {
-	const text = clean$22(value);
+	const text = clean$23(value);
 	if (!/^\d+(?:\.\d+)?$/.test(text) || !Number.isFinite(Number(text))) throw Error(`${location}: «${label}» requiere un número no negativo con punto decimal.`);
 	return Number(text);
 }
 function parsePedidoLine(cells, context, source = { row: "sin identificar" }) {
 	const location = source.sheet ? `Hoja «${source.sheet}», fila ${source.row}` : `Fila ${source.row} de Pedidos`;
 	if (!Array.isArray(cells) || cells.length !== PEDIDOS_HEADERS.length) throw Error(`${location}: se esperan las 228 columnas de Pedidos JDE.`);
-	const get = (field) => clean$22(cells[columns$2[field]]);
+	const get = (field) => clean$23(cells[columns$2[field]]);
 	const order = get("order"), orderType = get("type"), suffix = get("suffix");
 	const orderLine = get("line"), shortArticle = get("shortArticle"), jdeArticle = get("article");
 	if (![
@@ -36636,17 +36636,17 @@ var liquidacionFormatoLayout_default = {
 };
 //#endregion
 //#region src/adapters/liquidacionFormatoModel.js
-var clean$21 = (value) => String(value ?? "").replace(/[\u2010-\u2015\u2212]/g, "-").replace(/[^\x20-\x7E\xA0-\xFF\n]/g, " ");
+var clean$22 = (value) => String(value ?? "").replace(/[\u2010-\u2015\u2212]/g, "-").replace(/[^\x20-\x7E\xA0-\xFF\n]/g, " ");
 var num$1 = (value, decimals = 2) => Number(value).toLocaleString("en-US", {
 	minimumFractionDigits: decimals,
 	maximumFractionDigits: decimals
 });
-var money$1 = (value, prefix = "$") => value == null ? "" : `${prefix}${num$1(value)}`;
-var key$6 = (value) => clean$21(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+var money$2 = (value, prefix = "$") => value == null ? "" : `${prefix}${num$1(value)}`;
+var key$7 = (value) => clean$22(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 var sum$2 = (rows, column) => rows.reduce((total, row) => total + Number(row[column] || 0), 0);
 function formatoRow(charge) {
 	if (charge.reportRow != null) return Number(charge.reportRow);
-	const concept = key$6(charge.concept), udc = Number(charge.udc);
+	const concept = key$7(charge.concept), udc = Number(charge.udc);
 	if (charge.block === "external") return udc === 21 ? 13 : udc === 31 ? 14 : 15;
 	if (charge.block === "customs") {
 		if (charge.id === "dai" || /^(\(dai\)|dai\b)/.test(concept)) return 19;
@@ -36731,7 +36731,7 @@ function formatoValues(data) {
 		37
 	]) values[`F${row}`] = "";
 	const fob = rows.find((row) => row.Concepto === "Mercadería / FOB") || {};
-	values.D12 = money$1(fob["US$"]);
+	values.D12 = money$2(fob["US$"]);
 	values.G12 = Number(fob["US$"]) > 0 ? "100.0000%" : "";
 	const grouped = /* @__PURE__ */ new Map(), appendix = [];
 	for (const charge of form.charges || []) {
@@ -36745,8 +36745,8 @@ function formatoValues(data) {
 	}
 	for (const [row, charges] of grouped) {
 		const usd = sum$2(charges, "amountUSD"), nio = sum$2(charges, "amountNIO");
-		values[`D${row}`] = money$1(usd);
-		if (row >= 19) values[`E${row}`] = money$1(nio, "C$");
+		values[`D${row}`] = money$2(usd);
+		if (row >= 19) values[`E${row}`] = money$2(nio, "C$");
 		const udcs = [...new Set(charges.map((charge) => charge.udc).filter((value) => value != null))];
 		values[`F${row}`] = udcs.join(" / ");
 		const base = charges.reduce((total, charge) => total + (charge.block === "external" ? charge.amountUSDUnrounded ?? charge.amountUSD : charge.amountNIO / data.exchangeRate), 0);
@@ -36762,19 +36762,19 @@ function formatoValues(data) {
 		[27, customs],
 		[38, internment]
 	]) {
-		values[`D${row}`] = money$1(source["US$"]);
-		values[`E${row}`] = money$1(source["C$"], "C$");
+		values[`D${row}`] = money$2(source["US$"]);
+		values[`E${row}`] = money$2(source["C$"], "C$");
 	}
 	for (const [row, source] of [[16, external], [38, internment]]) values[`G${row}`] = Number(fob["US$"]) > 0 ? `${num$1((row === 38 ? Number(source["C$"] || 0) / data.exchangeRate : Number(source["US$"] || 0)) / fob["US$"] * 100, 4)}%` : "";
 	const total = rows.find((row) => row.Concepto === "Costo total") || {}, iva = rows.find((row) => row.Concepto === "IVA separado") || {};
-	values.F39 = money$1(Number(total["C$"] || 0) - Number(external["C$"] || 0), "C$");
-	values.F40 = money$1(total["C$"], "C$");
-	values.F41 = money$1(total["US$"]);
+	values.F39 = money$2(Number(total["C$"] || 0) - Number(external["C$"] || 0), "C$");
+	values.F40 = money$2(total["C$"], "C$");
+	values.F41 = money$2(total["US$"]);
 	values.G39 = form.udcPercentage == null ? "" : `${num$1(form.udcPercentage, 4)}%`;
 	values.G40 = form.factor == null ? "" : `${num$1(form.factor * 100, 1)}%`;
 	values.C41 = "IVA separado";
-	values.D41 = money$1(iva["US$"]);
-	values.E41 = money$1(iva["C$"], "C$");
+	values.D41 = money$2(iva["US$"]);
+	values.E41 = money$2(iva["C$"], "C$");
 	return {
 		values,
 		appendix
@@ -36782,7 +36782,7 @@ function formatoValues(data) {
 }
 //#endregion
 //#region src/adapters/liquidacionFormatoPdf.js
-var clean$20 = (value) => String(value ?? "").replace(/[\u2010-\u2015\u2212]/g, "-").replace(/[^\x20-\x7E\xA0-\xFF\n]/g, " ");
+var clean$21 = (value) => String(value ?? "").replace(/[\u2010-\u2015\u2212]/g, "-").replace(/[^\x20-\x7E\xA0-\xFF\n]/g, " ");
 var num = (value, decimals = 2) => Number(value).toLocaleString("en-US", {
 	minimumFractionDigits: decimals,
 	maximumFractionDigits: decimals
@@ -36848,7 +36848,7 @@ async function generateLiquidacionFormatoPdf(data) {
 	}
 	for (const [addr, raw] of Object.entries(values)) {
 		if (raw === "" || raw == null || covered.has(addr)) continue;
-		const style = boxes.get(addr)?.cell.style || {}, b = bounds(addr), text = clean$20(raw), font = style.bold ? bold : style.italic ? italic : normal;
+		const style = boxes.get(addr)?.cell.style || {}, b = bounds(addr), text = clean$21(raw), font = style.bold ? bold : style.italic ? italic : normal;
 		let right = b.right;
 		if (b.c === 0 && b.r >= 10 && b.r <= 37) right = xs[3];
 		if ([
@@ -36924,7 +36924,7 @@ async function generateLiquidacionFormatoPdf(data) {
 		};
 		begin();
 		for (const charge of appendix) {
-			let rest = clean$20(charge.header ? charge.concept : `${charge.concept} | UDC ${charge.udc ?? "-"} | US$ ${num(charge.amountUSD)} | C$ ${num(charge.amountNIO)}${charge.source ? ` | ${charge.source}${charge.sourceVersion ? ` v${charge.sourceVersion}` : ""}` : ""}`);
+			let rest = clean$21(charge.header ? charge.concept : `${charge.concept} | UDC ${charge.udc ?? "-"} | US$ ${num(charge.amountUSD)} | C$ ${num(charge.amountNIO)}${charge.source ? ` | ${charge.source}${charge.sourceVersion ? ` v${charge.sourceVersion}` : ""}` : ""}`);
 			while (rest) {
 				if (y < 60) begin();
 				let length = rest.length;
@@ -36956,14 +36956,14 @@ async function generateLiquidacionFormatoPdf(data) {
 //#region src/adapters/liquidacionPdf.js
 var PAGE = [595.28, 841.89], MARGIN = 36, BOTTOM = 57;
 var WIDTH = PAGE[0] - MARGIN * 2;
-var clean$19 = (value) => String(value ?? "").replace(/[\u2010-\u2015\u2212]/g, "-").replace(/\u00a0/g, " ").replace(/[^\x20-\x7E\xA0-\xFF\n]/g, " ");
+var clean$20 = (value) => String(value ?? "").replace(/[\u2010-\u2015\u2212]/g, "-").replace(/\u00a0/g, " ").replace(/[^\x20-\x7E\xA0-\xFF\n]/g, " ");
 var number$2 = (value, decimals = 2) => value === "" || value == null ? "-" : typeof value === "number" && Number.isFinite(value) ? value.toLocaleString("en-US", {
 	minimumFractionDigits: decimals,
 	maximumFractionDigits: decimals
-}) : clean$19(value);
+}) : clean$20(value);
 function wrap(value, font, size, width) {
 	const lines = [];
-	for (const paragraph of clean$19(value).split("\n")) {
+	for (const paragraph of clean$20(value).split("\n")) {
 		let current = "";
 		for (const word of paragraph.split(/\s+/).filter(Boolean)) {
 			const candidate = current ? `${current} ${word}` : word;
@@ -36988,7 +36988,7 @@ function wrap(value, font, size, width) {
 async function generateLiquidacionPdf(data = {}) {
 	if (data.template === "Formato") return generateLiquidacionFormatoPdf(data);
 	const pdf = await PDFDocument.create();
-	const title = clean$19(data.title || "Reporte de Liquidación"), reference = clean$19(data.reference || "");
+	const title = clean$20(data.title || "Reporte de Liquidación"), reference = clean$20(data.reference || "");
 	pdf.setTitle(title);
 	pdf.setAuthor("Casa Pellas - Demo local");
 	const normal = await pdf.embedFont(StandardFonts.Helvetica), bold = await pdf.embedFont(StandardFonts.HelveticaBold);
@@ -37002,7 +37002,7 @@ async function generateLiquidacionPdf(data = {}) {
 	};
 	const rows = Array.isArray(data.rows) ? data.rows : [];
 	let page, y, freshY;
-	const draw = (text, x, baseline, size = 8.5, font = normal, ink = color.text) => page.drawText(clean$19(text), {
+	const draw = (text, x, baseline, size = 8.5, font = normal, ink = color.text) => page.drawText(clean$20(text), {
 		x,
 		y: baseline,
 		size,
@@ -37026,7 +37026,7 @@ async function generateLiquidacionPdf(data = {}) {
 		paragraph(title, 17, bold, color.text, 5);
 		if (reference) paragraph(reference, 8.5, normal, color.muted, 3);
 		const metadata = [
-			data.version != null ? `Versión ${clean$19(data.version)}` : "",
+			data.version != null ? `Versión ${clean$20(data.version)}` : "",
 			data.generatedAt ? `Fecha de cálculo ${formatLocalDate(data.generatedAt)}` : "",
 			data.exchangeRate != null ? `Tipo de cambio ${number$2(data.exchangeRate, 4)}` : ""
 		].filter(Boolean).join("  ·  ");
@@ -37109,7 +37109,7 @@ async function generateLiquidacionPdf(data = {}) {
 		const head = measure(headers, widths, true, true);
 		const measurements = source.map((row) => ({
 			row,
-			measure: measure(values(row), widths, /^subtotal$/i.test(clean$19(row.Concepto)) || titleText === "Totales")
+			measure: measure(values(row), widths, /^subtotal$/i.test(clean$20(row.Concepto)) || titleText === "Totales")
 		}));
 		const firstHeight = measurements[0]?.measure.height || 0;
 		if (28 + head.height + firstHeight > freshY - BOTTOM) throw Error("Un concepto excede una página legible del reporte; reduce su descripción antes de generar el PDF.");
@@ -37123,8 +37123,8 @@ async function generateLiquidacionPdf(data = {}) {
 		};
 		repeat(false);
 		measurements.forEach(({ row, measure }, index) => {
-			const strong = /^subtotal$/i.test(clean$19(row.Concepto)) || titleText === "Totales";
-			const subtotalNext = /^subtotal$/i.test(clean$19(measurements[index + 1]?.row.Concepto)) ? measurements[index + 1].measure.height : 0;
+			const strong = /^subtotal$/i.test(clean$20(row.Concepto)) || titleText === "Totales";
+			const subtotalNext = /^subtotal$/i.test(clean$20(measurements[index + 1]?.row.Concepto)) ? measurements[index + 1].measure.height : 0;
 			const keepTogether = measure.height + subtotalNext <= freshY - BOTTOM - 28 - head.height;
 			ensure(measure.height + (keepTogether ? subtotalNext : 0), () => repeat(true));
 			tableRow(measure, widths, {
@@ -37138,7 +37138,7 @@ async function generateLiquidacionPdf(data = {}) {
 	newPage();
 	const blocks = /* @__PURE__ */ new Map(), financialTotals = [], ratios = [];
 	for (const row of rows) if (row.Bloque) {
-		const block = clean$19(row.Bloque);
+		const block = clean$20(row.Bloque);
 		if (!blocks.has(block)) blocks.set(block, []);
 		blocks.get(block).push(row);
 	} else if (row["US$"] != null || row["C$"] != null) financialTotals.push(row);
@@ -37176,7 +37176,7 @@ async function generateLiquidacionPdf(data = {}) {
 		number$2(row["C$"])
 	], 1);
 	for (const row of ratios) {
-		const label = clean$19(row.Concepto), value = number$2(row.Valor, /factor|cambio/i.test(label) ? 4 : 2);
+		const label = clean$20(row.Concepto), value = number$2(row.Valor, /factor|cambio/i.test(label) ? 4 : 2);
 		const labelLines = wrap(label, bold, 10, WIDTH - 145), height = labelLines.length * 14 + 10;
 		ensure(height);
 		labelLines.forEach((text, index) => draw(text, 42, y - 13 - index * 14, 10, bold));
@@ -38586,7 +38586,7 @@ var GETPAY_STATUSES = Object.keys({
 	pagado_parcial: "Pagado parcial",
 	pagado: "Pagado"
 });
-var key$5 = (value) => String(value ?? "").trim().toLocaleUpperCase("es-NI");
+var key$6 = (value) => String(value ?? "").trim().toLocaleUpperCase("es-NI");
 var present$1 = (value) => value !== void 0 && value !== null && String(value).trim() !== "";
 function bookedPaymentRate(state, currency, at) {
 	const baseCurrency = currencyCode(currency);
@@ -38614,11 +38614,11 @@ function normalizeStatementRows(rows) {
 		const location = row.location || importRowLocation(rows, index);
 		const invoiceNumber = requiredText(row.invoiceNumber, `Factura de ${location}`);
 		requireCondition(present$1(row.total), `El importe de ${location} es obligatorio.`);
-		const total = money$2(parseImportNumber(row.total, {
+		const total = money$3(parseImportNumber(row.total, {
 			label: "Importe",
 			location
 		}), { label: `Importe de ${location}` });
-		const balance = present$1(row.balance) ? money$2(parseImportNumber(row.balance, {
+		const balance = present$1(row.balance) ? money$3(parseImportNumber(row.balance, {
 			label: "Saldo",
 			location
 		}), { label: `Saldo de ${location}` }) : null;
@@ -38648,7 +38648,7 @@ function paymentInvoiceSources(state) {
 		const documentDate = invoice.date || invoice.documentDate || "";
 		const date = documentDate || invoice.versions?.[0]?.at?.slice(0, 10) || "";
 		const dateKind = documentDate ? "Fecha del documento" : "Fecha de registro";
-		const same = records.find((record) => record.id === invoice.id && key$5(record.company) === key$5(company) && key$5(record.supplier) === key$5(supplier) && key$5(record.currency) === key$5(currency));
+		const same = records.find((record) => record.id === invoice.id && key$6(record.company) === key$6(company) && key$6(record.supplier) === key$6(supplier) && key$6(record.currency) === key$6(currency));
 		if (same) {
 			same.expedienteIds = [...new Set([...same.expedienteIds || [], exp.id])];
 			same.documentId ||= invoice.documentId;
@@ -38658,7 +38658,7 @@ function paymentInvoiceSources(state) {
 			}
 			continue;
 		}
-		const sameDocument = invoice.documentId && records.find((record) => record.documentId === invoice.documentId && key$5(record.company) === key$5(company) && key$5(record.supplier) === key$5(supplier) && key$5(record.currency) === key$5(currency) && key$5(record.number || record.id) === key$5(invoice.number || invoice.id));
+		const sameDocument = invoice.documentId && records.find((record) => record.documentId === invoice.documentId && key$6(record.company) === key$6(company) && key$6(record.supplier) === key$6(supplier) && key$6(record.currency) === key$6(currency) && key$6(record.number || record.id) === key$6(invoice.number || invoice.id));
 		if (sameDocument) {
 			sameDocument.expedienteIds = [...new Set([...sameDocument.expedienteIds || [], exp.id])];
 			if (documentDate || !sameDocument.date) {
@@ -38746,7 +38746,7 @@ function normalizeStatementControlValues(payload) {
 			label,
 			allowBlank: true
 		});
-		return [field, value === null ? null : ["availableForNewOrder", "availableAfterTransfer"].includes(field) ? signedMoney(value, label) : money$2(value, { label })];
+		return [field, value === null ? null : ["availableForNewOrder", "availableAfterTransfer"].includes(field) ? signedMoney(value, label) : money$3(value, { label })];
 	}));
 	const observation = String(payload.observation || "").trim();
 	if (Object.values(values).some((value) => value !== null)) requiredText(observation, "Origen de los datos manuales del control");
@@ -38913,7 +38913,7 @@ function applyPaymentReviewAction(state, action) {
 		}
 		requireCondition(statement, "Seleccione un estado de cuenta.");
 		if (action.id && statement.events.some((event) => event.id === action.id)) return true;
-		const projections = Object.fromEntries(REVOLVENT_PROJECTION_FIELDS.map(([field, label]) => [field, present$1(p[field]) ? money$2(p[field], { label }) : null]));
+		const projections = Object.fromEntries(REVOLVENT_PROJECTION_FIELDS.map(([field, label]) => [field, present$1(p[field]) ? money$3(p[field], { label }) : null]));
 		if (p.reserveApplicable === "no_aplica") projections.reserve = null;
 		const observation = String(p.observation || "").trim();
 		if (p.reserveApplicable !== void 0) applyPaymentReviewAction(state, {
@@ -38935,7 +38935,7 @@ function applyPaymentReviewAction(state, action) {
 		requireCondition(!(adjustment && projections.requestAmount !== null), "Use un ajuste o un monto manual solicitado, no ambos.");
 		const conceptValues = Object.fromEntries(configuredProjectionConcepts(statement.supplierConfig).map((item) => {
 			const value = p.conceptValues?.[item.id] ?? p[item.id];
-			return [item.id, present$1(value) ? money$2(value, { label: item.label }) : null];
+			return [item.id, present$1(value) ? money$3(value, { label: item.label }) : null];
 		}));
 		statement.projections = {
 			...projections,
@@ -39265,8 +39265,8 @@ function normalizeSupplierConfig(payload, previous = {}) {
 		revolventApplicable,
 		reserveApplicable,
 		...Object.hasOwn(payload, "operationalRevolving") || Object.hasOwn(previous, "operationalRevolving") ? { operationalRevolving: operational } : {},
-		...Object.hasOwn(payload, "monthlyBudget") || Object.hasOwn(previous, "monthlyBudget") ? { monthlyBudget: Object.hasOwn(payload, "monthlyBudget") ? present(payload.monthlyBudget) ? money$2(payload.monthlyBudget, { label: "Presupuesto mensual" }) : null : previous.monthlyBudget } : {},
-		reserve: reserveApplicable === "no_aplica" ? null : Object.hasOwn(payload, "reserve") ? present(payload.reserve) ? money$2(payload.reserve, { label: "Reserva del proveedor" }) : null : previous.reserve ?? null,
+		...Object.hasOwn(payload, "monthlyBudget") || Object.hasOwn(previous, "monthlyBudget") ? { monthlyBudget: Object.hasOwn(payload, "monthlyBudget") ? present(payload.monthlyBudget) ? money$3(payload.monthlyBudget, { label: "Presupuesto mensual" }) : null : previous.monthlyBudget } : {},
+		reserve: reserveApplicable === "no_aplica" ? null : Object.hasOwn(payload, "reserve") ? present(payload.reserve) ? money$3(payload.reserve, { label: "Reserva del proveedor" }) : null : previous.reserve ?? null,
 		openingBalance,
 		openingDate,
 		openingObservation,
@@ -39476,7 +39476,7 @@ function calculateStatementProjection(state, statement, { projection = statement
 	}
 	if (explicit) for (const { id, label, stage } of configuredProjectionConcepts(config)) {
 		const input = projection.conceptValues?.[id] ?? projection[id];
-		const value = present(input) ? money$2(input, { label }) : null;
+		const value = present(input) ? money$3(input, { label }) : null;
 		if (value === null) missing.push(label);
 		components.push({
 			field: id,
@@ -39504,7 +39504,7 @@ function calculateStatementProjection(state, statement, { projection = statement
 	const priorCents = components.filter((item) => item.includedBefore).reduce((sum, item) => sum + (item.amount === null ? 0 : toCents(item.amount)), 0);
 	const calculatedCents = complete ? toCents(projection.monthlyBudget) + toCents(reserve) - ledger.balanceCents + additionalCents : null;
 	const transferCents = calculatedCents === null ? null : Math.max(0, calculatedCents);
-	const manual = present(projection.requestAmount) ? money$2(projection.requestAmount, { label: "Monto solicitado manual" }) : null;
+	const manual = present(projection.requestAmount) ? money$3(projection.requestAmount, { label: "Monto solicitado manual" }) : null;
 	const effectiveAdjustment = transferCents === null ? null : manual !== null ? toCents(manual) - transferCents : toCents(adjustment ?? 0);
 	const finalCents = transferCents === null ? null : transferCents + effectiveAdjustment;
 	if (effectiveAdjustment) requiredText(projection.adjustmentReason, "Motivo del ajuste de solicitud");
@@ -39538,17 +39538,17 @@ function calculateStatementProjection(state, statement, { projection = statement
 }
 //#endregion
 //#region src/modules/pagos/revolvingPolicy.js
-var key$4 = (value) => String(value ?? "").trim().normalize("NFC").toUpperCase();
+var key$5 = (value) => String(value ?? "").trim().normalize("NFC").toUpperCase();
 var currencyKey = (value) => ({
 	"C$": "NIO",
 	"US$": "USD"
-})[key$4(value)] || key$4(value);
+})[key$5(value)] || key$5(value);
 function revolvingScopeKey(state, scope) {
 	if (supplierCurrencyAccount(state, scope)) return paymentAccountKey(state, scope);
 	const master = getSupplierMaster(state, scope.supplier, scope.company);
 	return JSON.stringify([
-		key$4(scope.company),
-		key$4(scope.supplierMasterId || master?.id || scope.supplier),
+		key$5(scope.company),
+		key$5(scope.supplierMasterId || master?.id || scope.supplier),
 		currencyKey(scope.currency)
 	]);
 }
@@ -39596,7 +39596,7 @@ function revolvingAccountSummary(state, config, asOf = localDateKey(/* @__PURE__
 	};
 }
 var revolvingChief = (role, kind) => role === (kind === "service" ? "JefeImportaciones" : "JefeCompras");
-var normalizedInvoiceNumber = key$4;
+var normalizedInvoiceNumber = key$5;
 function replenishmentConflict(state, statement) {
 	const scope = revolvingScopeKey(state, statement);
 	const requests = (state.payments || []).filter((item) => item.kind === "revolving_replenishment" && revolvingScopeKey(state, item) === scope);
@@ -39628,7 +39628,7 @@ function warehouseStageProgress(exp) {
 var costeoWarehouseProblem = (exp) => warehouseStageProgress(exp).completed ? "" : "Almacén debe quedar finalizado al 100 % para cerrar el costeo.";
 //#endregion
 //#region src/modules/compras/lineAttributes.js
-var clean$18 = (value) => String(value ?? "").trim();
+var clean$19 = (value) => String(value ?? "").trim();
 function lineAttributeBinding(context, invoice, line, source, index) {
 	return JSON.stringify([
 		context.company,
@@ -39644,22 +39644,22 @@ function lineAttributeBinding(context, invoice, line, source, index) {
 		source?.orderType,
 		source?.order,
 		source?.orderLine,
-		clean$18(line.description) || clean$18(source?.masterDescription)
+		clean$19(line.description) || clean$19(source?.masterDescription)
 	]);
 }
 function resolvedLineAttributes(context, invoice, line, source, index) {
 	const binding = lineAttributeBinding(context, invoice, line, source, index);
 	const saved = (context.lineAttributes || []).filter((item) => item.binding === binding);
 	const brand = source ? saved.findLast((item) => item.field === "brand") : null;
-	const masterBrand = clean$18(source?.brand) || brand?.value || "";
-	const masterUnit = source?.masterLookup?.status === "found" ? clean$18(source.unit) : "";
+	const masterBrand = clean$19(source?.brand) || brand?.value || "";
+	const masterUnit = source?.masterLookup?.status === "found" ? clean$19(source.unit) : "";
 	return {
 		masterBrand,
 		masterUnit,
 		attributeBinding: binding,
 		attributeSource: {
-			brand: clean$18(source?.brand) ? "native-master" : brand ? "manual-line" : "pending",
-			...brand && !clean$18(source?.brand) ? { brandCorrection: brand } : {},
+			brand: clean$19(source?.brand) ? "native-master" : brand ? "manual-line" : "pending",
+			...brand && !clean$19(source?.brand) ? { brandCorrection: brand } : {},
 			unit: {
 				method: masterUnit ? "native-master" : "pending",
 				unit: masterUnit
@@ -39799,7 +39799,7 @@ var aliases$1 = {
 	"UM compr": ["UM compr"],
 	"UM": ["UM"]
 };
-var clean$17 = (value) => String(value ?? "").trim();
+var clean$18 = (value) => String(value ?? "").trim();
 var indexes = /* @__PURE__ */ new WeakMap();
 var fieldIndexes = /* @__PURE__ */ new WeakMap();
 var headerIndex = (headers, key) => {
@@ -39831,7 +39831,7 @@ function validateJdeArticleSource(source) {
 	const codeIndex = headerIndex(source.headers, columns[0]), shortIndex = headerIndex(source.headers, columns[2]), shorts = /* @__PURE__ */ new Set();
 	for (const [index, row] of source.rows.entries()) {
 		if (!Array.isArray(row) || row.length !== source.headers.length || row.some((value) => typeof value !== "string")) throw new Error(`Maestro JDE, fila ${index + 2}: conserva todas las columnas como texto.`);
-		const code = clean$17(row[codeIndex]), short = clean$17(row[shortIndex]);
+		const code = clean$18(row[codeIndex]), short = clean$18(row[shortIndex]);
 		if (!code || !short || shorts.has(short)) throw new Error(`Maestro JDE, fila ${index + 2}: código vacío o número corto repetido.`);
 		shorts.add(short);
 	}
@@ -39846,11 +39846,11 @@ function sourceIndex$1(source) {
 		const fields = sourceFields(source);
 		const codes = /* @__PURE__ */ new Map(), shorts = /* @__PURE__ */ new Map();
 		source.rows.forEach((row, index) => {
-			const code = clean$17(row[fields[columns[0]]]);
+			const code = clean$18(row[fields[columns[0]]]);
 			const matches = codes.get(code);
 			if (matches) matches.push(index);
 			else codes.set(code, [index]);
-			shorts.set(clean$17(row[fields[columns[2]]]), index);
+			shorts.set(clean$18(row[fields[columns[2]]]), index);
 		});
 		indexes.set(source, {
 			fields,
@@ -39864,15 +39864,15 @@ function jdeArticleRecord(source, index) {
 	const fields = sourceFields(source), row = source.rows[index];
 	const value = (key) => fields[key] >= 0 ? row[fields[key]] || "" : "";
 	return {
-		id: `JDE-ARTICLE-${clean$17(value(columns[2]))}`,
+		id: `JDE-ARTICLE-${clean$18(value(columns[2]))}`,
 		scope: "JDE_GLOBAL",
-		jdeArticle: clean$17(value(columns[0])),
+		jdeArticle: clean$18(value(columns[0])),
 		description: value(columns[1]),
 		description2: value("Descripción 2"),
 		shortArticle: value(columns[2]),
 		thirdArticle: value(columns[3]),
-		unit: clean$17(value("UM compr")) || clean$17(value("UM")),
-		brand: clean$17(value("Marca")) || explicitMasterBrand({
+		unit: clean$18(value("UM compr")) || clean$18(value("UM")),
+		brand: clean$18(value("Marca")) || explicitMasterBrand({
 			description: value(columns[1]),
 			description2: value("Descripción 2")
 		}),
@@ -39886,11 +39886,11 @@ function jdeArticleRecord(source, index) {
 }
 function lookupJdeArticles(catalog, code) {
 	if (!catalog?.jdeSource) return [];
-	return (sourceIndex$1(catalog.jdeSource).codes.get(clean$17(code)) || []).map((index) => jdeArticleRecord(catalog.jdeSource, index));
+	return (sourceIndex$1(catalog.jdeSource).codes.get(clean$18(code)) || []).map((index) => jdeArticleRecord(catalog.jdeSource, index));
 }
 function lookupJdeArticleByShort(catalog, shortArticle) {
 	if (!catalog?.jdeSource) return null;
-	const index = sourceIndex$1(catalog.jdeSource).shorts.get(clean$17(shortArticle));
+	const index = sourceIndex$1(catalog.jdeSource).shorts.get(clean$18(shortArticle));
 	return index === void 0 ? null : jdeArticleRecord(catalog.jdeSource, index);
 }
 function jdeArticleClassification(catalog, article) {
@@ -39899,17 +39899,17 @@ function jdeArticleClassification(catalog, article) {
 		companyCode: "",
 		lineCode: ""
 	};
-	const { fields, shorts } = sourceIndex$1(source), row = source.rows[shorts.get(clean$17(article.shortArticle))];
-	const at = (key) => fields[key] >= 0 ? clean$17(row?.[fields[key]]) : "";
+	const { fields, shorts } = sourceIndex$1(source), row = source.rows[shorts.get(clean$18(article.shortArticle))];
+	const at = (key) => fields[key] >= 0 ? clean$18(row?.[fields[key]]) : "";
 	return {
 		companyCode: at("Código vta 3"),
 		lineCode: at("Código cpra 1")
 	};
 }
 function jdeReferenceIdentityIssue(row, catalog) {
-	const code = clean$17(row.jdeArticle), short = clean$17(row.shortArticle), third = clean$17(row.thirdArticle);
-	if (!clean$17(row.referenceType) || !code || !clean$17(row.reference)) return "faltan campos nativos";
-	if (row.referenceType === "VN" && !clean$17(row.supplierCode)) return "falta el número de proveedor JDE";
+	const code = clean$18(row.jdeArticle), short = clean$18(row.shortArticle), third = clean$18(row.thirdArticle);
+	if (!clean$18(row.referenceType) || !code || !clean$18(row.reference)) return "faltan campos nativos";
+	if (row.referenceType === "VN" && !clean$18(row.supplierCode)) return "falta el número de proveedor JDE";
 	const source = catalog?.jdeSource;
 	if (!source) return "el artículo no aparece en el maestro";
 	const { fields, codes, shorts } = sourceIndex$1(source);
@@ -39918,7 +39918,7 @@ function jdeReferenceIdentityIssue(row, catalog) {
 	const index = short ? shorts.get(short) : matches.length === 1 ? matches[0] : void 0;
 	if (index === void 0) return short ? "las identidades JDE no corresponden al mismo artículo" : "el artículo no aparece en el maestro";
 	const native = source.rows[index];
-	if (code !== clean$17(native[fields[columns[0]]]) || third && third !== clean$17(native[fields[columns[3]]])) return "las identidades JDE no corresponden al mismo artículo";
+	if (code !== clean$18(native[fields[columns[0]]]) || third && third !== clean$18(native[fields[columns[3]]])) return "las identidades JDE no corresponden al mismo artículo";
 	return "";
 }
 function validateJdeCrossReferences(table, catalog) {
@@ -39934,7 +39934,7 @@ function validateJdeCrossReferences(table, catalog) {
 			"reference",
 			"effectiveDate",
 			"expiryDate"
-		].map((field) => clean$17(row[field])));
+		].map((field) => clean$18(row[field])));
 		const issue = jdeReferenceIdentityIssue(row, catalog) || (seen.has(key) ? "registro repetido" : "");
 		if (issue) {
 			if (table.validationMode !== "retain-invalid-v1") throw Error(`Referencia cruzada, fila ${index + 2}: ${issue}.`);
@@ -39952,15 +39952,15 @@ function validateJdeCrossReferences(table, catalog) {
 }
 //#endregion
 //#region src/modules/compras/articleReferences.js
-var clean$16 = (value) => String(value ?? "").trim();
-var orderProviderCode = (value) => clean$16(value).replace(/^0+(?=\d)/, "");
+var clean$17 = (value) => String(value ?? "").trim();
+var orderProviderCode = (value) => clean$17(value).replace(/^0+(?=\d)/, "");
 var caches = /* @__PURE__ */ new WeakMap();
 var confirmedCompanies = {
 	"Casa Pellas": "10",
 	Velosa: "11",
 	Kipesa: "12"
 };
-var key$3 = (a, b) => JSON.stringify([a, b]);
+var key$4 = (a, b) => JSON.stringify([a, b]);
 var nodeKey = (node) => node.shortArticle ? `short:${node.shortArticle}` : `code:${node.jdeArticle}`;
 var addIndex = (map, id, value) => {
 	if (!map.has(id)) map.set(id, []);
@@ -39972,14 +39972,14 @@ function referenceContext(state, exp, invoice) {
 	return {
 		referenceCatalog: catalog,
 		referenceCompanies: state?.catalogs?.companies || [],
-		referenceSupplierCode: clean$16(getSupplierMaster(state, exp?.supplier, exp?.company)?.jdeCode),
-		referenceCompanyCode: clean$16(company?.jdeCode || company?.companyCode || confirmedCompanies[exp?.company]),
+		referenceSupplierCode: clean$17(getSupplierMaster(state, exp?.supplier, exp?.company)?.jdeCode),
+		referenceCompanyCode: clean$17(company?.jdeCode || company?.companyCode || confirmedCompanies[exp?.company]),
 		referenceDate: invoice?.date || invoice?.documentDate || "",
 		lineAttributes: exp?.compras?.lineAttributes || []
 	};
 }
 function referenceDate(value) {
-	const text = clean$16(value), iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text), jde = /^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/.exec(text);
+	const text = clean$17(value), iso = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text), jde = /^(\d{1,2})\/(\d{1,2})\/(\d{2}|\d{4})$/.exec(text);
 	if (!iso && !jde) return null;
 	let year = Number(iso ? iso[1] : jde[3]);
 	const month = Number(iso ? iso[2] : jde[2]), day = Number(iso ? iso[3] : jde[1]);
@@ -40001,7 +40001,7 @@ function indexFor(catalog) {
 		groups: /* @__PURE__ */ new Map()
 	};
 	table.records.forEach((row, i) => {
-		const type = clean$16(row.referenceType);
+		const type = clean$17(row.referenceType);
 		if (![
 			"VN",
 			"S",
@@ -40011,13 +40011,13 @@ function indexFor(catalog) {
 			row,
 			rowNumber: i + 2
 		};
-		if (type === "VN") addIndex(index.vn, key$3(clean$16(row.supplierCode), clean$16(row.reference)), entry);
+		if (type === "VN") addIndex(index.vn, key$4(clean$17(row.supplierCode), clean$17(row.reference)), entry);
 		else {
-			addIndex(index.from, clean$16(row.jdeArticle), entry);
-			if (type === "S") addIndex(index.substitutions, clean$16(row.reference), entry);
+			addIndex(index.from, clean$17(row.jdeArticle), entry);
+			if (type === "S") addIndex(index.substitutions, clean$17(row.reference), entry);
 			if (type === "GN") {
-				addIndex(index.membership, clean$16(row.reference), entry);
-				addIndex(index.groups, key$3(clean$16(row.shortArticle), clean$16(row.jdeArticle)), entry);
+				addIndex(index.membership, clean$17(row.reference), entry);
+				addIndex(index.groups, key$4(clean$17(row.shortArticle), clean$17(row.jdeArticle)), entry);
 			}
 		}
 	});
@@ -40025,10 +40025,10 @@ function indexFor(catalog) {
 	return index;
 }
 var identity$1 = (item) => ({
-	jdeArticle: clean$16(item.jdeArticle),
-	shortArticle: clean$16(item.shortArticle)
+	jdeArticle: clean$17(item.jdeArticle),
+	shortArticle: clean$17(item.shortArticle)
 });
-var routeLabel = (path) => {
+var routeLabel$1 = (path) => {
 	const types = path.map((step) => step.type).filter((type, i, all) => type !== all[i - 1]);
 	return types.length === 1 && types[0] === "VN" ? "Directa · VN" : types.join(" → ");
 };
@@ -40047,7 +40047,7 @@ var statusText = {
 	incomplete: "Relaciones pendientes de aclarar"
 };
 function resolveArticleReference(reference, context = {}, orderRows = null) {
-	const catalog = context.referenceCatalog, supplier = clean$16(context.referenceSupplierCode), company = clean$16(context.referenceCompanyCode), code = clean$16(reference);
+	const catalog = context.referenceCatalog, supplier = clean$17(context.referenceSupplierCode), company = clean$17(context.referenceCompanyCode), code = clean$17(reference);
 	const evidence = /* @__PURE__ */ new Map(), issues = [], result = (status, candidates = [], extra = {}) => ({
 		status,
 		label: statusText[status],
@@ -40061,14 +40061,14 @@ function resolveArticleReference(reference, context = {}, orderRows = null) {
 	if (!catalog?.jdeSource || !catalog?.crossReferences?.records?.length) return result("catalog-unavailable");
 	if (!supplier) return result("supplier-missing");
 	if (!company) return result("company-missing");
-	const index = indexFor(catalog), anchors = index.vn.get(key$3(supplier, code)) || [];
+	const index = indexFor(catalog), anchors = index.vn.get(key$4(supplier, code)) || [];
 	const asOf = referenceDate(context.referenceDate) || context.referenceToday || localDateKey(/* @__PURE__ */ new Date());
 	const remember = (entry) => evidence.set(entry.rowNumber, {
 		row: entry.rowNumber,
 		values: { ...entry.row }
 	});
 	const allowed = (entry) => {
-		const row = entry.row, provider = clean$16(row.supplierCode);
+		const row = entry.row, provider = clean$17(row.supplierCode);
 		if (row.referenceType === "GN" ? provider && provider !== supplier : provider !== supplier) return false;
 		remember(entry);
 		entry.issue ??= jdeReferenceIdentityIssue(row, catalog);
@@ -40084,7 +40084,7 @@ function resolveArticleReference(reference, context = {}, orderRows = null) {
 	const inCompany = (item) => jdeArticleClassification(catalog, item).companyCode === company;
 	const base = (entry) => lookupJdeArticleByShort(catalog, entry.row.shortArticle);
 	const step = (entry, from, to, extra = {}) => ({
-		type: clean$16(entry.row.referenceType),
+		type: clean$17(entry.row.referenceType),
 		from,
 		to,
 		row: entry.rowNumber,
@@ -40100,7 +40100,7 @@ function resolveArticleReference(reference, context = {}, orderRows = null) {
 			if (path.length && terminals.has(id) && !terminals.get(id).path.length) terminals.set(id, {
 				...identity$1(node),
 				path,
-				via: routeLabel(path)
+				via: routeLabel$1(path)
 			});
 			return;
 		}
@@ -40108,7 +40108,7 @@ function resolveArticleReference(reference, context = {}, orderRows = null) {
 		const value = {
 			...identity$1(node),
 			path,
-			via: routeLabel(path)
+			via: routeLabel$1(path)
 		};
 		if (node.shortArticle) terminals.set(id, value);
 		queue.push(value);
@@ -40117,7 +40117,7 @@ function resolveArticleReference(reference, context = {}, orderRows = null) {
 	const expiredAnchors = [];
 	const linkedCompanies = /* @__PURE__ */ new Map();
 	for (const entry of anchors) {
-		const expiry = clean$16(entry.row.expiryDate);
+		const expiry = clean$17(entry.row.expiryDate);
 		const expiryDay = referenceDate(expiry);
 		if (expiry && !expiryDay) {
 			remember(entry);
@@ -40142,7 +40142,7 @@ function resolveArticleReference(reference, context = {}, orderRows = null) {
 			otherCompany = true;
 			const code = jdeArticleClassification(catalog, item).companyCode;
 			if (code) {
-				const label = context.referenceCompanies?.find((row) => clean$16(row.jdeCode || row.companyCode || confirmedCompanies[row.label]) === code)?.label || Object.keys(confirmedCompanies).find((label) => confirmedCompanies[label] === code);
+				const label = context.referenceCompanies?.find((row) => clean$17(row.jdeCode || row.companyCode || confirmedCompanies[row.label]) === code)?.label || Object.keys(confirmedCompanies).find((label) => confirmedCompanies[label] === code);
 				linkedCompanies.set(code, {
 					code,
 					label: label || `Compañía JDE ${code}`
@@ -40156,8 +40156,8 @@ function resolveArticleReference(reference, context = {}, orderRows = null) {
 		const candidates = [];
 		for (const item of items) for (const source of orderRows) {
 			if (source.orderSupplierCode && orderProviderCode(source.orderSupplierCode) !== orderProviderCode(supplier)) continue;
-			if (clean$16(source.jdeArticle || source.article) !== item.jdeArticle) continue;
-			if (source.shortArticle && clean$16(source.shortArticle) !== item.shortArticle) continue;
+			if (clean$17(source.jdeArticle || source.article) !== item.jdeArticle) continue;
+			if (source.shortArticle && clean$17(source.shortArticle) !== item.shortArticle) continue;
 			if (!source.shortArticle && lookupJdeArticles(catalog, item.jdeArticle).length > 1) {
 				issues.push({ reason: `La orden no identifica el número corto de ${item.jdeArticle}.` });
 				continue;
@@ -40198,19 +40198,19 @@ function resolveArticleReference(reference, context = {}, orderRows = null) {
 				shortArticle: ""
 			}, path);
 		};
-		for (const entry of from) if (entry.row.referenceType === "S" && (!node.shortArticle || clean$16(entry.row.shortArticle) === node.shortArticle) && allowed(entry)) {
-			const target = clean$16(entry.row.reference);
+		for (const entry of from) if (entry.row.referenceType === "S" && (!node.shortArticle || clean$17(entry.row.shortArticle) === node.shortArticle) && allowed(entry)) {
+			const target = clean$17(entry.row.reference);
 			destinations(target, [...node.path, step(entry, node.jdeArticle, target)]);
 		}
-		const groups = [...index.membership.get(node.jdeArticle) || [], ...from.filter((entry) => entry.row.referenceType === "GN" && (!node.shortArticle || clean$16(entry.row.shortArticle) === node.shortArticle))];
+		const groups = [...index.membership.get(node.jdeArticle) || [], ...from.filter((entry) => entry.row.referenceType === "GN" && (!node.shortArticle || clean$17(entry.row.shortArticle) === node.shortArticle))];
 		const handled = /* @__PURE__ */ new Set();
 		for (const membership of groups) {
 			if (!allowed(membership)) continue;
-			const leader = base(membership), groupKey = key$3(clean$16(membership.row.shortArticle), clean$16(membership.row.jdeArticle));
+			const leader = base(membership), groupKey = key$4(clean$17(membership.row.shortArticle), clean$17(membership.row.jdeArticle));
 			if (!leader || !inCompany(leader) || handled.has(groupKey)) continue;
 			handled.add(groupKey);
 			for (const member of index.groups.get(groupKey) || []) if (allowed(member)) {
-				const target = clean$16(member.row.reference);
+				const target = clean$17(member.row.reference);
 				destinations(target, [...node.path, step(member, node.jdeArticle, target, {
 					group: leader.jdeArticle,
 					membershipRow: membership.rowNumber
@@ -40280,12 +40280,12 @@ function referenceManifest(state, exp, invoices, sourceRows = [], orderRelations
 		supplier: context.referenceSupplierCode,
 		company: context.referenceCompanyCode,
 		rows: (invoices || []).flatMap((invoice) => (invoice.lines || []).map((line, index) => {
-			const relation = orderRelations.find((row) => row.company === exp.company && row.supplier === exp.supplier && clean$16(row.supplierOrder) === clean$16(line.supplierOrder));
+			const relation = orderRelations.find((row) => row.company === exp.company && row.supplier === exp.supplier && clean$17(row.supplierOrder) === clean$17(line.supplierOrder));
 			const order = line.order || relation?.order, orderType = line.orderType || relation?.orderType;
 			const resolution = resolveArticleReference(line.article, {
 				...context,
 				referenceDate: invoice.date || invoice.documentDate || ""
-			}, sourceRows.filter((row) => (!row.company || row.company === exp.company) && (!row.supplier || row.supplier === exp.supplier) && clean$16(row.order) === clean$16(order) && row.orderType && row.orderLine && (!orderType || clean$16(row.orderType) === clean$16(orderType)) && (!line.orderLine || clean$16(row.orderLine) === clean$16(line.orderLine))));
+			}, sourceRows.filter((row) => (!row.company || row.company === exp.company) && (!row.supplier || row.supplier === exp.supplier) && clean$17(row.order) === clean$17(order) && row.orderType && row.orderLine && (!orderType || clean$17(row.orderType) === clean$17(orderType)) && (!line.orderLine || clean$17(row.orderLine) === clean$17(line.orderLine))));
 			const native = resolution.status === "matched" ? lookupJdeArticleByShort(context.referenceCatalog, resolution.candidates[0].shortArticle) : null;
 			return {
 				invoiceId: invoice.id || invoice.invoiceId,
@@ -40470,8 +40470,8 @@ function resolveExpedienteId(state, id) {
 }
 //#endregion
 //#region src/modules/compras/reviewFindings.js
-var clean$15 = (value) => String(value ?? "").trim();
-var ref = (row) => clean$15(row.crossReferenceVN || row.referenceVN);
+var clean$16 = (value) => String(value ?? "").trim();
+var ref = (row) => clean$16(row.crossReferenceVN || row.referenceVN);
 function articleMasterFieldMessage(source, field) {
 	return source?.masterLookup?.status === "found" ? `El maestro de artículos no cuenta con ${field} para este artículo. Actualiza el dato en JDE.` : `No se pudo verificar ${field} en el maestro de artículos. Revisa el registro en JDE.`;
 }
@@ -40494,7 +40494,7 @@ function articleCatalogFinding(source) {
 		label: "Artículo duplicado en catálogo",
 		message: `El código JDE ${code} tiene más de un registro en el catálogo de ${scope}. Corrige el catálogo antes de continuar.`
 	};
-	const missing = [!clean$15(source.brand) && "marca", !clean$15(source.unit) && "unidad"].filter(Boolean);
+	const missing = [!clean$16(source.brand) && "marca", !clean$16(source.unit) && "unidad"].filter(Boolean);
 	return {
 		label: missing.length === 2 ? "Faltan marca y unidad en catálogo" : `Falta ${missing[0]} en catálogo`,
 		message: `El artículo ${code} tiene ${missing.join(" y ")} pendiente en el catálogo JDE. Completa esos datos en el catálogo y vuelve a cotejar; no se toman del Excel de órdenes.`
@@ -40503,9 +40503,9 @@ function articleCatalogFinding(source) {
 function purchaseCandidates(line, rows, context = {}, invoiceLines = []) {
 	const scoped = (rows || []).filter((row) => (!row.company || row.company === context.company) && (!row.supplier || row.supplier === context.supplier));
 	const relation = (context.orderRelations || []).find((item) => item.supplierOrder === line.supplierOrder && (!item.company || item.company === context.company) && (!item.supplier || item.supplier === context.supplier));
-	const order = clean$15(line.order || relation?.order), type = clean$15(line.orderType || relation?.orderType);
-	const quantity = invoiceLines.filter((item) => clean$15(item.article) === clean$15(line.article) && clean$15(item.order) === clean$15(line.order) && clean$15(item.orderType) === clean$15(line.orderType)).reduce((sum, item) => sum + Number(item.quantity || 0), 0) || Number(line.quantity);
-	const candidates = scoped.filter((row) => order ? clean$15(row.order) === order && (!type || row.orderType === type) && (ref(row) === clean$15(line.article) || Number(row.quantity) === quantity) : ref(row) && ref(row) === clean$15(line.article));
+	const order = clean$16(line.order || relation?.order), type = clean$16(line.orderType || relation?.orderType);
+	const quantity = invoiceLines.filter((item) => clean$16(item.article) === clean$16(line.article) && clean$16(item.order) === clean$16(line.order) && clean$16(item.orderType) === clean$16(line.orderType)).reduce((sum, item) => sum + Number(item.quantity || 0), 0) || Number(line.quantity);
+	const candidates = scoped.filter((row) => order ? clean$16(row.order) === order && (!type || row.orderType === type) && (ref(row) === clean$16(line.article) || Number(row.quantity) === quantity) : ref(row) && ref(row) === clean$16(line.article));
 	return [...new Map(candidates.map((row) => [JSON.stringify([
 		row.orderType,
 		row.order,
@@ -40519,7 +40519,7 @@ function purchaseCandidates(line, rows, context = {}, invoiceLines = []) {
 		referenceVN: ref(row),
 		quantity: row.quantity,
 		unitCost: row.unitCost,
-		reason: ref(row) === clean$15(line.article) ? "Referencia exacta; confirma orden y línea en la factura" : "Cantidad coincidente en la misma orden; revisa referencia/sustituto en JDE",
+		reason: ref(row) === clean$16(line.article) ? "Referencia exacta; confirma orden y línea en la factura" : "Cantidad coincidente en la misma orden; revisa referencia/sustituto en JDE",
 		confirmed: false
 	}));
 }
@@ -40639,7 +40639,7 @@ function translationFieldIssues(rows, context, format) {
 }
 //#endregion
 //#region src/modules/administracion/articleMaster.js
-var clean$14 = (value) => String(value ?? "").trim();
+var clean$15 = (value) => String(value ?? "").trim();
 function validateArticleMaster(catalog, { owned = false } = {}) {
 	if (!catalog || catalog.schemaVersion !== "1") throw new Error("El maestro de artículos no tiene el formato esperado.");
 	if (catalog.jdeSource) validateJdeArticleSource(catalog.jdeSource);
@@ -40653,7 +40653,7 @@ function validateArticleMaster(catalog, { owned = false } = {}) {
 }
 function articleMasterReviewItems(state, exp, rows = []) {
 	if (!state.articleMaster?.jdeSource) return [];
-	return [...new Set(rows.map((row) => clean$14(row.jdeArticle || row.article)))].flatMap((code) => lookupJdeArticles(state.articleMaster, code)).map((item) => ({
+	return [...new Set(rows.map((row) => clean$15(row.jdeArticle || row.article)))].flatMap((code) => lookupJdeArticles(state.articleMaster, code)).map((item) => ({
 		...item,
 		references: void 0,
 		classification: jdeArticleClassification(state.articleMaster, item)
@@ -40661,12 +40661,12 @@ function articleMasterReviewItems(state, exp, rows = []) {
 }
 function withArticleMaster(rows, state, exp, { includeSecondDescription = false } = {}) {
 	return rows.map((row) => {
-		const found = row.shortArticle ? [lookupJdeArticleByShort(state.articleMaster, row.shortArticle)].filter((item) => item && clean$14(item.jdeArticle) === clean$14(row.jdeArticle || row.article)) : lookupJdeArticles(state.articleMaster, row.jdeArticle || row.article);
+		const found = row.shortArticle ? [lookupJdeArticleByShort(state.articleMaster, row.shortArticle)].filter((item) => item && clean$15(item.jdeArticle) === clean$15(row.jdeArticle || row.article)) : lookupJdeArticles(state.articleMaster, row.jdeArticle || row.article);
 		const masterLookup = {
 			status: !state.articleMaster?.jdeSource ? "catalog-missing" : found.length > 1 ? "article-ambiguous" : found.length === 1 ? "found" : "article-missing",
 			company: exp?.company || "",
 			supplier: exp?.supplier || "",
-			jdeArticle: clean$14(row.jdeArticle || row.article)
+			jdeArticle: clean$15(row.jdeArticle || row.article)
 		};
 		if (found.length !== 1) return {
 			...row,
@@ -40682,7 +40682,7 @@ function withArticleMaster(rows, state, exp, { includeSecondDescription = false 
 		return {
 			...row,
 			...item.shortArticle ? { shortArticle: item.shortArticle } : {},
-			unit: clean$14(item.unit),
+			unit: clean$15(item.unit),
 			brand: explicitMasterBrand(item),
 			masterDescription: item.description || "",
 			...includeSecondDescription && { masterDescription2: item.description2 || "" },
@@ -40712,7 +40712,7 @@ function reduceArticleMaster(state, action) {
 }
 //#endregion
 //#region src/modules/compras/supplierOcr.js
-var clean$13 = (value) => String(value ?? "").trim();
+var clean$14 = (value) => String(value ?? "").trim();
 var DEMO_SUPPLIER_OCR_STRUCTURES = [{
 	id: "atlas-demo-v1",
 	supplier: "Proveedor Atlas",
@@ -40825,7 +40825,7 @@ function supplierOcrStructure(supplier, structures = DEMO_SUPPLIER_OCR_STRUCTURE
 	brand: "Delta"
 }));
 function mapSupplierOcrSample(supplier, file) {
-	if (!clean$13(supplier)) throw new Error("Selecciona el proveedor antes de procesar la muestra OCR.");
+	if (!clean$14(supplier)) throw new Error("Selecciona el proveedor antes de procesar la muestra OCR.");
 	const profile = supplierOcrStructure(supplier);
 	if (!profile.configured) throw new Error("Este proveedor no tiene una estructura OCR de muestra. Usa Formulario o Excel.");
 	const raw = file?.ocrRaw;
@@ -40842,7 +40842,7 @@ function mapSupplierOcrSample(supplier, file) {
 		const mapped = Object.fromEntries(Object.entries(profile.columns).map(([key, column]) => [key, record[column] ?? ""]));
 		return {
 			...mapped,
-			id: clean$13(mapped.id) || String(index + 1).padStart(3, "0"),
+			id: clean$14(mapped.id) || String(index + 1).padStart(3, "0"),
 			reviewed: false,
 			ocrProfileId: profile.id
 		};
@@ -40853,17 +40853,17 @@ function mapSupplierOcrSample(supplier, file) {
 	return {
 		supplier,
 		profileId: profile.id,
-		number: clean$13(header[profile.number]),
-		currency: clean$13(header[profile.currency]),
+		number: clean$14(header[profile.number]),
+		currency: clean$14(header[profile.currency]),
 		lines,
 		charges
 	};
 }
 //#endregion
 //#region src/modules/compras/sessionReview.js
-var clean$12 = (value) => String(value ?? "").trim();
-var validUnitCost = (value) => clean$12(value) !== "" && Number.isFinite(Number(value)) && Number(value) >= 0;
-var normalized = (value) => clean$12(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+var clean$13 = (value) => String(value ?? "").trim();
+var validUnitCost = (value) => clean$13(value) !== "" && Number.isFinite(Number(value)) && Number(value) >= 0;
+var normalized = (value) => clean$13(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 var PURCHASE_REVIEW_POLICY = "native-jde-line-attributes-v6";
 var TRANSPORT_OPTIONS = [
 	"Aéreo",
@@ -40912,7 +40912,7 @@ var CAPTURE_ORDER_TYPES = [
 	"0S"
 ];
 function findOrderRelation(relations, { company, supplier, supplierOrder }) {
-	return (relations || []).find((row) => row.company === company && row.supplier === supplier && clean$12(row.supplierOrder) === clean$12(supplierOrder)) || null;
+	return (relations || []).find((row) => row.company === company && row.supplier === supplier && clean$13(row.supplierOrder) === clean$13(supplierOrder)) || null;
 }
 function orderRelationsFor(state, exp) {
 	const unique = /* @__PURE__ */ new Map();
@@ -40920,8 +40920,8 @@ function orderRelationsFor(state, exp) {
 	return [...unique.values()];
 }
 var sharedOrderMatchKey = (article, order, currency) => JSON.stringify([
-	clean$12(article),
-	clean$12(order),
+	clean$13(article),
+	clean$13(order),
 	pedidoCurrency(currency)
 ]);
 var scopedOrderRows = /* @__PURE__ */ new WeakMap();
@@ -40942,8 +40942,8 @@ function orderRowsFor(rows, { company = "", supplier = "" }) {
 	};
 	for (const row of rows) {
 		if (row.company && company && row.company !== company || row.supplier && supplier && row.supplier !== supplier) continue;
-		add(orders, clean$12(row.order), row);
-		add(references, clean$12(row.crossReferenceVN || row.referenceVN), row);
+		add(orders, clean$13(row.order), row);
+		add(references, clean$13(row.crossReferenceVN || row.referenceVN), row);
 		if (row.supabaseOrderVersion) for (const article of row.supabaseReferences || []) add(sharedMatches, sharedOrderMatchKey(article, row.order, row.orderCurrency), row);
 	}
 	const index = {
@@ -40959,18 +40959,18 @@ function exactJdeMatch(line, rows, context = {}) {
 		...context,
 		supplierOrder: line.supplierOrder
 	});
-	const order = clean$12(line.order || relation?.order);
-	const orderType = clean$12(line.orderType || relation?.orderType);
+	const order = clean$13(line.order || relation?.order);
+	const orderType = clean$13(line.orderType || relation?.orderType);
 	const scope = context.captureOnly ? null : orderRowsFor(rows, context);
-	const orderLine = clean$12(line.orderLine);
-	const inOrder = (row) => (!context.requireMaster || row.orderType && row.orderLine) && (!orderType || !row.orderType || clean$12(row.orderType) === orderType) && (!line.orderLine || !row.orderLine || clean$12(row.orderLine) === orderLine);
-	const referenceCandidates = scope?.references.get(clean$12(line.article)) || [];
-	const article = clean$12(line.article), matchKey = sharedOrderMatchKey(article, order, context.invoiceCurrency);
+	const orderLine = clean$13(line.orderLine);
+	const inOrder = (row) => (!context.requireMaster || row.orderType && row.orderLine) && (!orderType || !row.orderType || clean$13(row.orderType) === orderType) && (!line.orderLine || !row.orderLine || clean$13(row.orderLine) === orderLine);
+	const referenceCandidates = scope?.references.get(clean$13(line.article)) || [];
+	const article = clean$13(line.article), matchKey = sharedOrderMatchKey(article, order, context.invoiceCurrency);
 	const orderCandidates = scope?.orders.get(order) || [];
 	const registered = scope?.sharedMatches.get(matchKey)?.find((row) => inOrder(row) && row.supabaseReferences.includes(article));
 	const proposed = context.sharedOrderMatches?.get(matchKey);
 	const shared = !context.captureOnly && (registered || proposed && !orderCandidates.some(inOrder) && proposed);
-	if (shared && (!orderType || orderType === shared.orderType) && (!clean$12(line.orderLine) || clean$12(line.orderLine) === shared.orderLine)) {
+	if (shared && (!orderType || orderType === shared.orderType) && (!clean$13(line.orderLine) || clean$13(line.orderLine) === shared.orderLine)) {
 		const { via, path, expiryDay } = registered?.supabaseReferenceResolutions?.find((item) => item.article === article) || shared.referenceResolution || {
 			via: "VN",
 			path: [{
@@ -41048,7 +41048,7 @@ function reviewInvoice(invoice, rows, context = {}) {
 	const requireDescription = !context.captureOnly && (context.requireDescription ?? translationFormatFor().headers.includes("DESCRIPCION"));
 	const { matches, totals, counts } = matchedInvoiceQuantities(sourceRows, rows, context);
 	const documentErrors = [];
-	if (!clean$12(invoice?.number)) documentErrors.push({
+	if (!clean$13(invoice?.number)) documentErrors.push({
 		type: "Número de documento",
 		field: "number",
 		message: "Completa el número de factura."
@@ -41059,7 +41059,7 @@ function reviewInvoice(invoice, rows, context = {}) {
 		message: `El documento ${invoice.documentType} no corresponde a una factura comercial.`
 	});
 	const result = sourceRows.map((line, index) => {
-		const match = matches[index], source = match.source, description = clean$12(source?.masterDescription) || clean$12(line.description);
+		const match = matches[index], source = match.source, description = clean$13(source?.masterDescription) || clean$13(line.description);
 		const errors = [...documentErrors], warnings = [], differences = [];
 		const attributes = resolvedLineAttributes(context, invoice, line, source, index);
 		const add = (type, field, message, label) => errors.push({
@@ -41079,7 +41079,7 @@ function reviewInvoice(invoice, rows, context = {}) {
 			order: match.order,
 			orderLine: match.orderLine || line.orderLine
 		};
-		const missing = requiredFields.filter(([key]) => !clean$12(resolved[key])).map(([, label]) => label);
+		const missing = requiredFields.filter(([key]) => !clean$13(resolved[key])).map(([, label]) => label);
 		const missingDescription = requireDescription && !description;
 		if (missingDescription) missing.push("descripción en español");
 		if (!context.captureOnly && !match.orderType && (context.requireMaster || match.candidates.some((row) => row.orderType))) missing.push("tipo de orden");
@@ -41092,20 +41092,20 @@ function reviewInvoice(invoice, rows, context = {}) {
 		if (!validInvoicePrice) add("FOB", "unitCost", context.captureOnly ? "Completa el precio unitario de la factura, igual o mayor que cero." : "Completa un FOB unitario válido, igual o mayor que cero.");
 		if (!context.captureOnly && line.orderType && !CAPTURE_ORDER_TYPES.includes(line.orderType)) add("Tipo de documento", "orderType", "Selecciona el tipo de orden exacto: OC, OP, OS o 0S.");
 		if (!context.captureOnly && line.supplierOrder && !line.order && !match.relation) add("Relación OC / OP", "supplierOrder", "Relaciona la OC del proveedor con la orden de esta compañía.");
-		if (!context.captureOnly && line.order && match.relation && clean$12(line.order) !== clean$12(match.relation.order)) add("Relación OC / OP", "order", "La orden asignada difiere de la equivalencia registrada. Revisa la relación.");
+		if (!context.captureOnly && line.order && match.relation && clean$13(line.order) !== clean$13(match.relation.order)) add("Relación OC / OP", "order", "La orden asignada difiere de la equivalencia registrada. Revisa la relación.");
 		if (!context.captureOnly && rows?.length && match.order && line.article) {
 			if (match.resolution && !source) {
 				const finding = referenceFinding(match.resolution);
 				add(finding.type, finding.field, finding.message, finding.label);
 			} else if (match.ambiguous) add("Código JDE / referencia VN", "article", "Hay varias coincidencias. Completa el tipo y la línea de orden para identificar una sola.");
-			else if (!source) if (context.requireMaster && match.referenceCandidates.some((row) => clean$12(row.order) === match.order && (!clean$12(row.orderType) || !clean$12(row.orderLine)))) add("Maestro JDE", "master", "Completa el tipo y la línea de orden en la exportación JDE antes de validar OP, OS o 0S.");
-			else if (match.referenceCandidates.some((row) => clean$12(row.order) === match.order && row.orderType && clean$12(row.orderType) !== match.orderType)) add("Tipo de documento", "orderType", "El tipo de orden no coincide con JDE. OP, OS y 0S son distintos.");
-			else if (match.referenceCandidates.some((row) => clean$12(row.order) !== match.order)) add("Número de documento", "order", "El número de orden no coincide con JDE para este artículo y proveedor.");
+			else if (!source) if (context.requireMaster && match.referenceCandidates.some((row) => clean$13(row.order) === match.order && (!clean$13(row.orderType) || !clean$13(row.orderLine)))) add("Maestro JDE", "master", "Completa el tipo y la línea de orden en la exportación JDE antes de validar OP, OS o 0S.");
+			else if (match.referenceCandidates.some((row) => clean$13(row.order) === match.order && row.orderType && clean$13(row.orderType) !== match.orderType)) add("Tipo de documento", "orderType", "El tipo de orden no coincide con JDE. OP, OS y 0S son distintos.");
+			else if (match.referenceCandidates.some((row) => clean$13(row.order) !== match.order)) add("Número de documento", "order", "El número de orden no coincide con JDE para este artículo y proveedor.");
 			else add("Código JDE / referencia VN", "article", match.candidates.length ? "El número de parte no coincide exactamente con la referencia VN del proveedor. Corrige JDE y vuelve a cargar su exportación." : "No hay una línea de esta orden, compañía y proveedor en la exportación JDE seleccionada.");
 		}
 		if (source && !context.captureOnly) {
 			const sharedSubstitution = match.resolution?.via === "S" && (source.supabaseOrderVersion || source.orderVersion);
-			if (context.requireVN !== false && !isPedidoLine(source) && !sharedSubstitution && !clean$12(source.crossReferenceVN || source.referenceVN)) add("Código JDE / referencia VN", "article", "La exportación no incluye referencia VN. Completa el maestro JDE y vuelve a cargarlo.");
+			if (context.requireVN !== false && !isPedidoLine(source) && !sharedSubstitution && !clean$13(source.crossReferenceVN || source.referenceVN)) add("Código JDE / referencia VN", "article", "La exportación no incluye referencia VN. Completa el maestro JDE y vuelve a cargarlo.");
 			const invoiceQuantity = totals.get(source);
 			if (invoiceQuantity !== Number(source.quantity)) differences.push({
 				type: "Cantidad",
@@ -41120,7 +41120,7 @@ function reviewInvoice(invoice, rows, context = {}) {
 				field: "unitCost",
 				message: `El precio unitario de la factura es ${line.unitCost} y el de JDE es ${source.unitCost}. Diferencia informativa.`
 			});
-			const masterUnit = attributes.masterUnit, invoiceUnit = clean$12(line.invoiceUnit);
+			const masterUnit = attributes.masterUnit, invoiceUnit = clean$13(line.invoiceUnit);
 			if (invoiceUnit && masterUnit && invoiceUnit !== masterUnit) warnings.push(`Unidad factura: ${invoiceUnit}; maestro JDE: ${masterUnit}. Diferencia informativa; no convierte cantidades.`);
 			if (context.requireMaster && source.masterLookup && source.masterLookup.status !== "found") {
 				const finding = articleCatalogFinding(source);
@@ -41175,13 +41175,13 @@ function reviewInvoice(invoice, rows, context = {}) {
 var reviewLineKey = (line, index) => line.reviewKey || `${line.id || "linea"}:${index + 1}`;
 //#endregion
 //#region src/modules/compras/orderCoverage.js
-var clean$11 = (value) => String(value ?? "").trim();
+var clean$12 = (value) => String(value ?? "").trim();
 var orderLineKey = (exp, row) => JSON.stringify([
 	row.company || exp?.company,
 	row.supplier || exp?.supplier,
-	clean$11(row.orderType),
-	clean$11(row.order),
-	clean$11(row.orderLine)
+	clean$12(row.orderType),
+	clean$12(row.order),
+	clean$12(row.orderLine)
 ]);
 function orderSourcesByLine(state, exp) {
 	const byLine = /* @__PURE__ */ new Map();
@@ -41296,10 +41296,10 @@ function orderChangePreview(state, exp, incoming) {
 }
 //#endregion
 //#region src/modules/compras/orderApplications.js
-var clean$10 = (value) => String(value ?? "").trim();
+var clean$11 = (value) => String(value ?? "").trim();
 var sourceId = (exp, row, state) => (state?.comprasOrderSources || []).find((item) => orderLineKey(exp, item) === orderLineKey(exp, row))?.id || orderLineKey(exp, row);
 var sameInvoice = (application, exp, invoice) => application.expedienteId === exp.id && application.invoiceId === invoice.id;
-var active = (application) => application.status === "active";
+var active$1 = (application) => application.status === "active";
 var latest = (source) => source?.versions?.at(-1);
 function availableOrderSources(state, exp) {
 	const sources = (state.comprasOrderSources || []).filter((source) => source.company === exp?.company && source.supplier === exp?.supplier && latest(source) && canReadDocument(state, state.documents.find((document) => document.id === latest(source).documentId)));
@@ -41313,7 +41313,7 @@ function availableOrderSources(state, exp) {
 function applicationsForExport(state, exp, rows) {
 	const keys = new Set(rows.map((row) => orderLineKey(exp, row)));
 	const ids = new Set((state.comprasOrderSources || []).filter((source) => keys.has(orderLineKey(exp, source))).map((source) => source.id));
-	return (state.comprasOrderApplications || []).filter((application) => active(application) && ids.has(application.sourceId) && canReadExpediente(state, state.expedientes.find((item) => item.id === application.expedienteId)));
+	return (state.comprasOrderApplications || []).filter((application) => active$1(application) && ids.has(application.sourceId) && canReadExpediente(state, state.expedientes.find((item) => item.id === application.expedienteId)));
 }
 function registerOrderSources(state, exp, rows, { documentId, documentVersion, reason, at, includedApplicationIds = [], balanceModes = {} }) {
 	if (!Array.isArray(includedApplicationIds)) throw new Error("Confirma las aplicaciones incluidas en el saldo de esta exportación.");
@@ -41335,7 +41335,7 @@ function registerOrderSources(state, exp, rows, { documentId, documentVersion, r
 			"OP",
 			"OS",
 			"0S"
-		].includes(row.orderType) || !clean$10(row.orderLine) || !isPedidoLine(row) && !sharedSubstitution && !clean$10(row.crossReferenceVN || row.referenceVN)) continue;
+		].includes(row.orderType) || !clean$11(row.orderLine) || !isPedidoLine(row) && !sharedSubstitution && !clean$11(row.crossReferenceVN || row.referenceVN)) continue;
 		const key = orderLineKey(exp, row), id = previousByLine.get(key)?.[0]?.id || key;
 		const index = positions.get(id), previous = sources[index];
 		if (seen.has(id)) throw new Error("La exportación repite la misma orden y línea JDE. Revisa la fuente antes de cargar.");
@@ -41443,7 +41443,7 @@ function applyInvoiceToOrders(state, exp, invoice, sourceVersion, context, actio
 	if (!sourceVersion?.sourceRefs?.length) return state;
 	assertOrderCoverage(state, exp, sourceVersion);
 	const applications = [...state.comprasOrderApplications || []];
-	if (applications.some((application) => active(application) && application.company === exp.company && application.supplier === exp.supplier && application.invoiceNumber === invoice.number && !sameInvoice(application, exp, invoice))) throw new Error("Esta factura ya tiene una aplicación documental en otro expediente. Reutiliza su expediente para evitar aplicarla dos veces.");
+	if (applications.some((application) => active$1(application) && application.company === exp.company && application.supplier === exp.supplier && application.invoiceNumber === invoice.number && !sameInvoice(application, exp, invoice))) throw new Error("Esta factura ya tiene una aplicación documental en otro expediente. Reutiliza su expediente para evitar aplicarla dos veces.");
 	const replacing = applications.filter((application) => sameInvoice(application, exp, invoice));
 	const positions = /* @__PURE__ */ new Map();
 	applications.forEach((item, index) => {
@@ -41472,7 +41472,7 @@ function applyInvoiceToOrders(state, exp, invoice, sourceVersion, context, actio
 		const id = JSON.stringify([
 			exp.id,
 			invoice.id,
-			clean$10(line.id || index + 1)
+			clean$11(line.id || index + 1)
 		]);
 		if (touched.has(id)) throw new Error("Dos filas comparten la misma identidad de aplicación. Corrige las claves de línea.");
 		touched.add(id);
@@ -42374,7 +42374,7 @@ function reportRowFor(charge) {
 }
 //#endregion
 //#region src/modules/administracion/userCatalog.js
-var key$2 = (value) => String(value || "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+var key$3 = (value) => String(value || "").trim().normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 function userCatalog(state) {
 	const records = /* @__PURE__ */ new Map();
 	const add = (item, role) => {
@@ -42385,8 +42385,8 @@ function userCatalog(state) {
 			"no disponible",
 			"no asignado",
 			"sin asignar"
-		].includes(key$2(label))) return;
-		const id = key$2(label), previous = records.get(id);
+		].includes(key$3(label))) return;
+		const id = key$3(label), previous = records.get(id);
 		records.set(id, {
 			id: `USR-${id.replace(/[^a-z0-9]+/g, "-")}`,
 			label,
@@ -42406,14 +42406,14 @@ function userCatalog(state) {
 		add({ label: exp.buyer }, "Compras");
 		add({ label: exp.importer }, "Importaciones");
 	}
-	for (const item of state.catalogs?.users || []) records.set(key$2(item.label), {
-		...records.get(key$2(item.label)),
+	for (const item of state.catalogs?.users || []) records.set(key$3(item.label), {
+		...records.get(key$3(item.label)),
 		...item
 	});
 	const used = new Set([...records.values()].filter((item) => item.email).map((item) => item.email.toLowerCase()));
 	return [...records.values()].map((item) => {
 		if (item.email) return item;
-		const parts = key$2(item.label).split(/\s+/).filter(Boolean), local = (parts.length >= 3 ? parts[0][0] + parts[1][0] + parts[2] : parts[0]?.[0] + (parts[1] || parts[0] || "usuario")).replace(/[^a-z0-9]/g, "") || "usuario";
+		const parts = key$3(item.label).split(/\s+/).filter(Boolean), local = (parts.length >= 3 ? parts[0][0] + parts[1][0] + parts[2] : parts[0]?.[0] + (parts[1] || parts[0] || "usuario")).replace(/[^a-z0-9]/g, "") || "usuario";
 		let suffix = 1, email = `${local}@casapellas.com`;
 		while (used.has(email)) {
 			suffix++;
@@ -42428,7 +42428,7 @@ function userCatalog(state) {
 		};
 	});
 }
-var findCatalogUser = (state, label) => userCatalog(state).find((item) => key$2(item.label) === key$2(label) && item.active !== false);
+var findCatalogUser = (state, label) => userCatalog(state).find((item) => key$3(item.label) === key$3(label) && item.active !== false);
 //#endregion
 //#region src/modules/importaciones/agencyContacts.js
 function agencyContacts(state, exp, label = exp.importaciones?.agency?.name) {
@@ -42963,7 +42963,7 @@ function purchaseInvoicePayment(state, exp, accountForPayment = revolvingPayment
 }
 function reservePurchaseInvoices(plan, value) {
 	requireCondition(!plan.issue, plan.issue);
-	let remaining = toCents(money$2(value, { positive: true }));
+	let remaining = toCents(money$3(value, { positive: true }));
 	requireCondition(remaining > 0, "Importe: indique un número mayor que cero.");
 	requireCondition(remaining <= plan.availableCents, "El importe supera el saldo disponible del expediente.");
 	const allocations = [];
@@ -42980,11 +42980,11 @@ function reservePurchaseInvoices(plan, value) {
 }
 //#endregion
 //#region src/modules/compras/purchasePaymentRequirements.js
-var clean$9 = (value) => String(value ?? "").trim();
+var clean$10 = (value) => String(value ?? "").trim();
 function orderLabels(lines = []) {
 	return [...new Set(lines.flatMap((line) => {
-		const order = clean$9(line.resolvedOrder || line.order).toUpperCase();
-		const type = clean$9(line.resolvedOrderType || line.orderType).toUpperCase();
+		const order = clean$10(line.resolvedOrder || line.order).toUpperCase();
+		const type = clean$10(line.resolvedOrderType || line.orderType).toUpperCase();
 		if (!order) return [];
 		const match = /^(OP|0S|OS)[ -]+(.+)$/.exec(order);
 		if (match) return [match[1] + " " + match[2].trim()];
@@ -42998,7 +42998,7 @@ function invoicePaymentReference(exp, invoice) {
 	return {
 		expedienteId: exp?.id || "",
 		oc: orderLabels(reviewed?.length ? reviewed : invoice?.lines),
-		oi: clean$9(exp?.importaciones?.oiNumber)
+		oi: clean$10(exp?.importaciones?.oiNumber)
 	};
 }
 function recordedInvoiceReference(state, source) {
@@ -43044,7 +43044,7 @@ function purchasePaymentRequirements(state, exp, { advance, orders = [] } = {}) 
 	const reference = {
 		expedienteId: exp.id,
 		oc: advance ? validOrders.map((order) => order.type + " " + order.number) : [...new Set(invoices.flatMap((item) => item.oc))],
-		oi: clean$9(exp.importaciones?.oiNumber),
+		oi: clean$10(exp.importaciones?.oiNumber),
 		invoices
 	};
 	const missing = missingPaymentReferences(condition?.requirements, reference);
@@ -43095,14 +43095,14 @@ var revolvingPayment = (payment) => payment.kind === "revolving_replenishment";
 function registerPaymentObligation(state, input) {
 	const existing = state.obligations.find((item) => item.id === input.id || item.number === input.number && item.company === input.company && item.supplier === input.supplier && item.currency === input.currency);
 	if (existing) {
-		requireCondition(existing.id === input.id && money$2(existing.total) === money$2(input.total), "Ya existe ese documento; utilice su saldo sin crear otra deuda.");
+		requireCondition(existing.id === input.id && money$3(existing.total) === money$3(input.total), "Ya existe ese documento; utilice su saldo sin crear otra deuda.");
 		return;
 	}
 	requiredText(input.id, "Referencia");
 	requiredText(input.company, "Compañía");
 	requiredText(input.supplier, "Proveedor");
 	requireCondition(acceptsRecordedCurrency(state, input.currency), "Selecciona una moneda del catálogo.");
-	const total = money$2(input.total, { positive: true });
+	const total = money$3(input.total, { positive: true });
 	state.obligations.push({
 		...clone$1(input),
 		total,
@@ -43150,7 +43150,7 @@ function recordReplenishment(state, payment, action, event) {
 	const p = action.payload, scope = revolvingAccount(state, payment);
 	requireCondition(scope, "La cuenta revolvente debe estar activa al confirmar el desembolso.");
 	requireCondition(validPaymentDate(p.date) && p.date > scope.openingDate && p.date <= localDateKey(event.at), "Indique una fecha efectiva posterior al cierre del saldo inicial y hasta hoy.");
-	const amount = money$2(p.amount, { positive: true }), amountCents = toCents(amount);
+	const amount = money$3(p.amount, { positive: true }), amountCents = toCents(amount);
 	const pending = getPaymentBalances(payment).reservedCents;
 	requireCondition(amountCents > 0 && amountCents <= pending, "El desembolso debe estar dentro del importe pendiente de la reposición.");
 	const transferReference = assertTransferReference(state, p.transferReference, true);
@@ -43201,7 +43201,7 @@ function recordRevolvingCreditNote(state, action, at, actor) {
 	const identity = normalizedInvoiceNumber(folio);
 	const supplierCurrency = revolvingSupplierCurrencyKey(state, config);
 	requireCondition(!state.revolvingCreditNotes.some((item) => item.identity === identity && revolvingSupplierCurrencyKey(state, item) === supplierCurrency), "Esta nota de crédito ya está registrada para este proveedor y moneda.");
-	const amountCents = toCents(money$2(amount, {
+	const amountCents = toCents(money$3(amount, {
 		positive: true,
 		label: "Importe de la nota de crédito"
 	}));
@@ -43272,7 +43272,7 @@ function applyPaymentAction(state, action) {
 		requireCondition(statement && revolvingScopeKey(state, statement) === revolvingScopeKey(state, source) && state.documents.some((doc) => doc.id === statement.documentId && doc.versions?.length), "Seleccione el estado de cuenta que respalda la aplicación del fondo.");
 		const identity = normalizedInvoiceNumber(source.number || source.id), scope = revolvingScopeKey(state, source);
 		requireCondition(paymentInvoiceSources(state).filter((item) => revolvingScopeKey(state, item) === scope && normalizedInvoiceNumber(item.number || item.id) === identity).length === 1, "Resuelva la identidad de la factura antes de aplicar el fondo.");
-		const amountCents = toCents(money$2(p.amount, { positive: true })), observation = requiredText(p.observation, "Evidencia de la aplicación");
+		const amountCents = toCents(money$3(p.amount, { positive: true })), observation = requiredText(p.observation, "Evidencia de la aplicación");
 		const applicationReference = requiredText(p.applicationReference, "Referencia de la aplicación del proveedor");
 		requireCondition(!state.revolvingApplications.some((item) => item.obligationId === source.id && normalizedInvoiceNumber(item.applicationReference) === normalizedInvoiceNumber(applicationReference)), "Esta aplicación del proveedor ya está registrada en la factura.");
 		const effectiveDate = p.date || localDateKey(at);
@@ -43456,7 +43456,7 @@ function applyPaymentAction(state, action) {
 			requiredText(input.supplier, "Proveedor");
 			requireCondition(acceptsRecordedCurrency(state, input.currency), "La factura debe indicar una moneda válida.");
 			requireCondition(!state.obligations.find((item) => item.number === (input.number || input.id) && item.company === input.company && item.supplier === input.supplier && item.currency === input.currency), "Esa factura ya existe; seleccione su obligación original.");
-			const total = money$2(input.total, { positive: true });
+			const total = money$3(input.total, { positive: true });
 			target = {
 				...clone$1(input),
 				total,
@@ -43469,7 +43469,7 @@ function applyPaymentAction(state, action) {
 		requireCondition(target && !/^PROFORMA[-:]/i.test(target.id) && target.type !== "proforma" && target.kind !== "proforma", "Seleccione una factura válida de destino.");
 		requireCondition(source.company === target.company && source.supplier === target.supplier && source.currency === target.currency, "La proforma y factura deben tener la misma compañía, proveedor y moneda.");
 		if (p.expedienteId) requireCondition(source.expedienteIds?.includes(p.expedienteId) && target.expedienteIds?.includes(p.expedienteId), "Ambos documentos deben pertenecer al expediente seleccionado.");
-		const observation = requiredText(p.observation, "Motivo del vínculo"), coverageAmount = money$2(p.coverageAmount ?? 0, { label: "Cobertura monetaria" }), advanceAmount = money$2(p.advanceAmount ?? 0, { label: "Anticipo pagado aplicado" });
+		const observation = requiredText(p.observation, "Motivo del vínculo"), coverageAmount = money$3(p.coverageAmount ?? 0, { label: "Cobertura monetaria" }), advanceAmount = money$3(p.advanceAmount ?? 0, { label: "Anticipo pagado aplicado" });
 		const coverageCents = toCents(coverageAmount), advanceCents = toCents(advanceAmount), sourceBalance = getObligationBalances(state, source.id), targetBalance = getObligationBalances(state, target.id);
 		requireCondition(coverageCents > 0 || advanceCents > 0, "Indique una cobertura o un anticipo efectivo a aplicar.");
 		requireCondition(coverageCents <= sourceBalance.faceTotalCents - sourceBalance.coverageOutgoingCents, "La cobertura supera el importe no vinculado de la proforma.");
@@ -43523,8 +43523,8 @@ function applyPaymentAction(state, action) {
 		if (consolidated) requireCondition(p.source === "compras" && p.expedienteId && Array.isArray(p.purchaseInvoiceIds) && !p.obligation && !p.allocations && !p.revolvingException, "La solicitud conjunta debe corresponder a las facturas de un expediente de Compras.");
 		const previous = p.sourceKey && state.payments.find((item) => item.sourceKey === p.sourceKey);
 		if (previous) {
-			if (consolidated) requireCondition(previous.expedienteIds?.[0] === p.expedienteId && JSON.stringify(previous.invoiceReferences?.map((item) => item.id)) === JSON.stringify(p.purchaseInvoiceIds) && getPaymentBalances(previous).amountCents === toCents(money$2(p.amount, { positive: true })), "La solicitud ya existe con otros datos. Abra la gestión registrada.");
-			if (previous.revolvingException || p.revolvingException) requireCondition(previous.revolvingException && p.revolvingException && previous.revolvingException.reason === String(p.revolvingException.reason || "").trim() && previous.applications.length === p.allocations?.length && previous.applications.every((item, index) => item.obligationId === p.allocations[index].obligationId && item.amountCents === toCents(money$2(p.allocations[index].amount))), "La solicitud ya existe con otros datos. Abra la gestión registrada.");
+			if (consolidated) requireCondition(previous.expedienteIds?.[0] === p.expedienteId && JSON.stringify(previous.invoiceReferences?.map((item) => item.id)) === JSON.stringify(p.purchaseInvoiceIds) && getPaymentBalances(previous).amountCents === toCents(money$3(p.amount, { positive: true })), "La solicitud ya existe con otros datos. Abra la gestión registrada.");
+			if (previous.revolvingException || p.revolvingException) requireCondition(previous.revolvingException && p.revolvingException && previous.revolvingException.reason === String(p.revolvingException.reason || "").trim() && previous.applications.length === p.allocations?.length && previous.applications.every((item, index) => item.obligationId === p.allocations[index].obligationId && item.amountCents === toCents(money$3(p.allocations[index].amount))), "La solicitud ya existe con otros datos. Abra la gestión registrada.");
 			return true;
 		}
 		let requested = p.allocations, invoiceReferences, purchaseContext, proformaReferences, invoicePaymentPlan;
@@ -43604,7 +43604,7 @@ function applyPaymentAction(state, action) {
 			}
 		}
 		const allocations = requested.map((item) => {
-			const amount = money$2(item.amount, { positive: true });
+			const amount = money$3(item.amount, { positive: true });
 			const amountCents = toCents(amount);
 			requireCondition(amountCents <= getObligationBalances(state, item.obligationId).availableCents, `El importe de ${item.obligationId} supera su saldo disponible.`);
 			return {
@@ -43808,7 +43808,7 @@ function applyPaymentAction(state, action) {
 			const applied = allocations.map((item) => {
 				const application = payment.applications.find((row) => row.obligationId === item.obligationId);
 				requireCondition(application, "El documento no pertenece a esta gestión.");
-				const amount = money$2(item.amount, { positive: true });
+				const amount = money$3(item.amount, { positive: true });
 				const amountCents = toCents(amount);
 				const remainingCents = (application.amountCents ?? toCents(application.amount)) - (application.paidCents ?? toCents(application.paid)) - (application.cancelledCents ?? toCents(application.cancelled));
 				requireCondition(amountCents <= remainingCents, `El desembolso supera la reserva pendiente de ${item.obligationId}.`);
@@ -43835,7 +43835,7 @@ function applyPaymentAction(state, action) {
 			}
 			const totalCents = applied.reduce((sum, item) => sum + item.amountCents, 0);
 			const total = fromCents(totalCents);
-			if (p.amount !== void 0) requireCondition(toCents(money$2(p.amount, { positive: true })) === totalCents, "Las aplicaciones deben sumar el importe de este desembolso.");
+			if (p.amount !== void 0) requireCondition(toCents(money$3(p.amount, { positive: true })) === totalCents, "Las aplicaciones deben sumar el importe de este desembolso.");
 			const proof = addFinanceDocument(state, {
 				type: "comprobante-pago",
 				file: p.file,
@@ -43993,7 +43993,7 @@ function compareCosts(expected, reported) {
 	const byId = new Map(reported.map((item) => [item.id, item]));
 	requireCondition(byId.size === reported.length && reported.length === expected.length && expected.every((item) => byId.has(item.id)), "Revise conceptos duplicados, ausentes o sin correspondencia.");
 	const lines = expected.map((item) => {
-		const actual = money$2(byId.get(item.id).amount);
+		const actual = money$3(byId.get(item.id).amount);
 		const expectedCents = toCents(item.amount), reportedCents = toCents(actual), deltaCents = expectedCents - reportedCents, differenceCents = Math.abs(deltaCents);
 		return {
 			id: item.id,
@@ -44089,7 +44089,7 @@ function applyCostAction(state, action) {
 				requireCondition(Number.isFinite(rate) && rate > 0, "Tipo de cambio inválido.");
 				cost.draft.exchangeRate = rate;
 			}
-			if (p.fob !== void 0) cost.draft.fob = money$2(p.fob, {
+			if (p.fob !== void 0) cost.draft.fob = money$3(p.fob, {
 				positive: true,
 				label: "FOB"
 			});
@@ -44118,7 +44118,7 @@ function applyCostAction(state, action) {
 		case "COST_ADD_CHARGE": {
 			requireCondition(cost.draft, "Prepare una nueva versión para agregar un cargo.");
 			const concept = requiredText(p.concept, "Concepto");
-			const amount = money$2(p.amount, { positive: true });
+			const amount = money$3(p.amount, { positive: true });
 			const stored = addFinanceDocument(state, {
 				type: "soporte-cargo",
 				file: p.file,
@@ -44140,7 +44140,7 @@ function applyCostAction(state, action) {
 			break;
 		}
 		case "COST_DISTRIBUTE": {
-			const total = money$2(p.total, { positive: true });
+			const total = money$3(p.total, { positive: true });
 			requiredText(p.obligationId, "Factura compartida");
 			requiredText(p.concept, "Concepto");
 			requiredText(p.basis, "Base de reparto");
@@ -44149,7 +44149,7 @@ function applyCostAction(state, action) {
 			requireCondition(new Set(p.allocations.map((item) => item.expedienteId)).size === p.allocations.length, "No repita un expediente en el reparto.");
 			const allocations = p.allocations.map((item) => ({
 				expedienteId: getExpediente(state, item.expedienteId).id,
-				amount: money$2(item.amount),
+				amount: money$3(item.amount),
 				adjustment: Number(item.adjustment || 0)
 			}));
 			requireCondition(allocations.every((item) => Number.isFinite(item.adjustment) && item.amount + item.adjustment >= 0), "El ajuste no puede producir un cargo negativo.");
@@ -44205,9 +44205,9 @@ function applyCostAction(state, action) {
 			requireCondition(draft.charges.length > 0 && draft.charges.every((item) => !item.requiresSupport || item.verified && documentExists(state, item.documentId)), "Complete y revise los soportes de todos los cargos.");
 			const charges = draft.charges.map((item) => ({
 				...item,
-				amount: money$2(item.amount)
+				amount: money$3(item.amount)
 			}));
-			const fob = money$2(!cost.versions.length && cost.receivedPackage ? cost.receivedPackage.totalFob : draft.fob, {
+			const fob = money$3(!cost.versions.length && cost.receivedPackage ? cost.receivedPackage.totalFob : draft.fob, {
 				positive: true,
 				label: "FOB"
 			});
@@ -44597,7 +44597,7 @@ var LIBERATION_RECIPIENTS = [
 	"Importaciones",
 	"Costeo"
 ];
-var money = (value) => Math.round(Number(value) * 100);
+var money$1 = (value) => Math.round(Number(value) * 100);
 var text$5 = (value) => String(value ?? "").trim();
 var required$2 = (value, label) => {
 	if (!text$5(value)) throw new Error(`${label} es obligatorio.`);
@@ -45094,7 +45094,7 @@ function compareImportSources(sources) {
 					source: "datos",
 					message: `${field}: valor no numérico.`
 				});
-				else if (values.every((value) => value != null) && new Set(values.map(money)).size > 1) differences.push({
+				else if (values.every((value) => value != null) && new Set(values.map(money$1)).size > 1) differences.push({
 					field,
 					source: "datos",
 					message: `${field}: diferencia entre fuentes.`
@@ -45838,8 +45838,8 @@ function reduceImportaciones(state, action) {
 				iva: p.iva,
 				...taxDetails
 			}) : null;
-			const expected = totals ? money(totals.total) : money(amount);
-			if (!concepts.length || (totals ? expected !== money(amount) || money(p.iva) !== money(totals.iva) || money(p.taxable) !== money(totals.taxable) || money(p.untaxed) !== money(totals.untaxed) : concepts.reduce((sum, item) => sum + money(item.amount), 0) !== expected)) throw new Error("Los conceptos deben sumar la base de la factura. Revisa la base gravada e IVA del 15%.");
+			const expected = totals ? money$1(totals.total) : money$1(amount);
+			if (!concepts.length || (totals ? expected !== money$1(amount) || money$1(p.iva) !== money$1(totals.iva) || money$1(p.taxable) !== money$1(totals.taxable) || money$1(p.untaxed) !== money$1(totals.untaxed) : concepts.reduce((sum, item) => sum + money$1(item.amount), 0) !== expected)) throw new Error("Los conceptos deben sumar la base de la factura. Revisa la base gravada e IVA del 15%.");
 			const scopedInsurance = insurancePolicy && !action[REPLAY_LEGACY_INSURANCE_SERVICE];
 			const scopedInvoice = !insurancePolicy && !p.noAdditionalPayment && !action[REPLAY_LEGACY_SERVICE_INVOICE];
 			if (scopedInvoice) {
@@ -45919,7 +45919,7 @@ function reduceImportaciones(state, action) {
 				...next,
 				obligations: [...next.obligations, {
 					...obligation,
-					totalCents: money(amount),
+					totalCents: money$1(amount),
 					openingPaid: 0,
 					openingPaidCents: 0
 				}]
@@ -46109,8 +46109,8 @@ function reduceImportaciones(state, action) {
 				iva: p.iva,
 				...taxDetails
 			}) : null;
-			const expected = totals ? money(totals.total) : money(amount);
-			if (!concepts.length || (totals ? expected !== money(amount) || money(p.iva) !== money(totals.iva) || money(p.taxable) !== money(totals.taxable) || money(p.untaxed) !== money(totals.untaxed) : concepts.reduce((sum, item) => sum + money(item.amount), 0) !== expected)) throw new Error("Los conceptos deben sumar la base de la factura. Revisa la base gravada e IVA del 15%.");
+			const expected = totals ? money$1(totals.total) : money$1(amount);
+			if (!concepts.length || (totals ? expected !== money$1(amount) || money$1(p.iva) !== money$1(totals.iva) || money$1(p.taxable) !== money$1(totals.taxable) || money$1(p.untaxed) !== money$1(totals.untaxed) : concepts.reduce((sum, item) => sum + money$1(item.amount), 0) !== expected)) throw new Error("Los conceptos deben sumar la base de la factura. Revisa la base gravada e IVA del 15%.");
 			const expedienteIds = closedService && original.agencyShipmentId === group.id ? group.expedienteIds : [...new Set([exp.id, ...p.expedienteIds || []])];
 			if (closedService && (expedienteIds.length !== original.expedienteIds.length || expedienteIds.some((id) => !original.expedienteIds.includes(id)))) throw Error("Conserva los expedientes de la factura registrada.");
 			if (expedienteIds.some((id) => !original.expedienteIds.includes(id) && !state.expedientes.some((item) => item.id === id && serviceExpedienteSelectable(item, exp.company)))) throw new Error("Selecciona expedientes todavía no costeados para este servicio.");
@@ -46154,7 +46154,7 @@ function reduceImportaciones(state, action) {
 					...item,
 					...identity,
 					total: amount,
-					totalCents: money(amount),
+					totalCents: money$1(amount),
 					concepts,
 					expedienteIds
 				} : item),
@@ -46164,7 +46164,7 @@ function reduceImportaciones(state, action) {
 					applications: item.applications.map((application) => application.obligationId === original.id ? {
 						...application,
 						amount,
-						amountCents: money(amount)
+						amountCents: money$1(amount)
 					} : application),
 					events: [...item.events, {
 						id: action.id,
@@ -46185,7 +46185,7 @@ function reduceImportaciones(state, action) {
 					supplier,
 					number,
 					total: amount,
-					totalCents: money(amount),
+					totalCents: money$1(amount),
 					openingPaid: 0,
 					openingPaidCents: 0,
 					currency: currencyChanged ? currency : original.currency,
@@ -46456,7 +46456,7 @@ function reduceImportaciones(state, action) {
 				invoiceId,
 				documentIds: [...new Set(requiredIds)],
 				sources: structuredClone(data.review.confirmed.sources),
-				totalFob: data.review.comparisons.reduce((sum, row) => sum + money(row.fob), 0) / 100,
+				totalFob: data.review.comparisons.reduce((sum, row) => sum + money$1(row.fob), 0) / 100,
 				...stamp
 			};
 			data = {
@@ -47534,7 +47534,7 @@ function tariffCellValue(cell) {
 	return cellRawValue(cell);
 }
 var MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
-var clean$8 = (value) => String(value ?? "").trim();
+var clean$9 = (value) => String(value ?? "").trim();
 var header = (value) => normalizeImportHeader(value).replace(/[_.%]/g, "").replace(/\s+/g, "");
 var xmlAttribute = (tag, name) => tag.match(new RegExp(`\\b${name}=["']([^"']*)["']`))?.[1]?.replace(/&(?:amp|lt|gt|quot|apos);/g, (value) => ({
 	"&amp;": "&",
@@ -47648,7 +47648,7 @@ function fieldTariffAlias(value, { kind, hasCode = false } = {}) {
 	if (key === "DAI" && kind === "boletin") return "daiAmount";
 	if (key === "ISC" && kind === "boletin") return "iscAmount";
 	if (key === "DAI" && kind === "preliquidacion") return "daiRate";
-	return aliases[key] || clean$8(value);
+	return aliases[key] || clean$9(value);
 }
 function normalizeTariffRow(row, { kind, oiNumber = "" } = {}) {
 	const result = {}, hasCode = Object.keys(row).some((key) => ["CODIGO", "CODIGOPROVEEDOR"].includes(header(key)));
@@ -47659,10 +47659,10 @@ function normalizeTariffRow(row, { kind, oiNumber = "" } = {}) {
 		});
 		if (!key) continue;
 		const normalized = numericFields.has(key) ? numeric(value, label) : value;
-		if (Object.hasOwn(result, key) && result[key] !== normalized && clean$8(result[key]) && clean$8(normalized)) throw new Error(`Hay dos valores diferentes para ${label}.`);
+		if (Object.hasOwn(result, key) && result[key] !== normalized && clean$9(result[key]) && clean$9(normalized)) throw new Error(`Hay dos valores diferentes para ${label}.`);
 		if (!Object.hasOwn(result, key) || result[key] == null || result[key] === "") result[key] = normalized;
 	}
-	result.oi = clean$8(result.oi || oiNumber);
+	result.oi = clean$9(result.oi || oiNumber);
 	for (const key of [
 		"article",
 		"description",
@@ -47672,11 +47672,11 @@ function normalizeTariffRow(row, { kind, oiNumber = "" } = {}) {
 		"rule",
 		"proposedRule",
 		"preference"
-	]) if (Object.hasOwn(result, key)) result[key] = clean$8(result[key]);
-	if (!clean$8(row.oi ?? row.OI) && clean$8(oiNumber)) result.source = {
+	]) if (Object.hasOwn(result, key)) result[key] = clean$9(result[key]);
+	if (!clean$9(row.oi ?? row.OI) && clean$9(oiNumber)) result.source = {
 		...result.source,
 		oiReference: {
-			value: clean$8(oiNumber),
+			value: clean$9(oiNumber),
 			origin: "expediente"
 		}
 	};
@@ -47829,7 +47829,7 @@ function parseTariffWorksheet(sheet, { kind, oiNumber = "" } = {}) {
 			const values = rawRow(sheet, index, 41), get = (token) => beside(values, (key) => key.replace(/[:()$]/g, "").startsWith(token));
 			const taxes = {};
 			for (let r = index + 1; r < (starts[position + 1] || Math.min(sheet.rowCount + 1, index + 10)); r++) sheet.getRow(r).eachCell((cell, col) => {
-				const match = clean$8(tariffCellValue(cell)).match(/\b(DAI|ISC|IVA)\s*:?\s*([\d.,]+)\s*%/i);
+				const match = clean$9(tariffCellValue(cell)).match(/\b(DAI|ISC|IVA)\s*:?\s*([\d.,]+)\s*%/i);
 				if (match) taxes[match[1].toLowerCase()] = {
 					rate: Number(match[2].replace(",", ".")),
 					base: numeric(tariffCellValue(sheet.getRow(r + 1).getCell(col))),
@@ -47840,10 +47840,10 @@ function parseTariffWorksheet(sheet, { kind, oiNumber = "" } = {}) {
 				};
 			});
 			rows.push(normalizeTariffRow({
-				line: clean$8(values[1]),
-				sac: clean$8(get("SAC")),
+				line: clean$9(values[1]),
+				sac: clean$9(get("SAC")),
 				quantity: numeric(get("CANT")),
-				description: clean$8(get("ARTICULO")),
+				description: clean$9(get("ARTICULO")),
 				fob: numeric(get("FOB")),
 				cif: numeric(get("CIF")),
 				daiRate: taxes.dai?.rate ?? null,
@@ -47866,7 +47866,7 @@ function parseTariffWorksheet(sheet, { kind, oiNumber = "" } = {}) {
 		metadata.totals = {};
 		let usd = false;
 		sheet.eachRow((row) => {
-			const label = clean$8(tariffCellValue(row.getCell(1)));
+			const label = clean$9(tariffCellValue(row.getCell(1)));
 			if (/INFORME CONTABLE/i.test(label)) usd = true;
 			if (/CORDOBAS/i.test(label)) usd = false;
 			if (usd && /^(DAI|ISC|IVA|ALM|SPE|SSA)$/i.test(label)) metadata.totals[label.toUpperCase()] = {
@@ -47908,9 +47908,9 @@ function parseTariffWorksheet(sheet, { kind, oiNumber = "" } = {}) {
 	sheet.eachRow((row, index) => {
 		if (index === 1) return;
 		const item = Object.fromEntries(Object.entries(columns).filter(([, col]) => col).map(([key, col]) => [key, tariffCellValue(row.getCell(col))]));
-		const incompleteJdeArticle = jde && !clean$8(item.article) && (clean$8(item.jdeArticle) || clean$8(item.quantity) || clean$8(item.fob));
-		if (kind !== "boletin" && !clean$8(kind === "preliquidacion" ? item.sac : item.article) && !incompleteJdeArticle) {
-			if (sia || kind === "preliquidacion" && Object.values(item).some((value) => /^(total|totales)$/i.test(clean$8(value)))) addFooter(metadata, item, sheet, index, columns, { optionalAmounts: kind === "sia" });
+		const incompleteJdeArticle = jde && !clean$9(item.article) && (clean$9(item.jdeArticle) || clean$9(item.quantity) || clean$9(item.fob));
+		if (kind !== "boletin" && !clean$9(kind === "preliquidacion" ? item.sac : item.article) && !incompleteJdeArticle) {
+			if (sia || kind === "preliquidacion" && Object.values(item).some((value) => /^(total|totales)$/i.test(clean$9(value)))) addFooter(metadata, item, sheet, index, columns, { optionalAmounts: kind === "sia" });
 			return;
 		}
 		item.source = trace(sheet, index, Object.fromEntries(Object.entries(columns).filter(([, col]) => col)));
@@ -48039,13 +48039,13 @@ function normalizeAnnualSacRows(rows) {
 	const seen = /* @__PURE__ */ new Set();
 	return rows.map(({ sac: value, description: rawDescription, daiRate: rawRate, source }, index) => {
 		const label = `Fila ${source?.row ?? index + 2}`;
-		const digits = clean$8(value).replace(/[.\s]/g, "");
+		const digits = clean$9(value).replace(/[.\s]/g, "");
 		if (!/^\d{12}$/.test(digits)) throw new Error(`${label}. Ingresa los 12 dígitos de la partida SAC y conserva sus ceros iniciales.`);
-		const sac = historicalSac(digits), description = clean$8(rawDescription);
+		const sac = historicalSac(digits), description = clean$9(rawDescription);
 		if (seen.has(sac)) throw new Error(`${label}. La partida SAC ${sac} está duplicada.`);
 		if (!description || !["string", "number"].includes(typeof rawDescription)) throw new Error(`${label}. Ingresa la descripción.`);
 		const rateMessage = `${label}. Ingresa un DAI numérico no negativo.`;
-		const rateText = clean$8(rawRate).replace(/%$/, "").trim().replace(",", ".");
+		const rateText = clean$9(rawRate).replace(/%$/, "").trim().replace(",", ".");
 		if (typeof rawRate !== "number" && !/^[-+]?(?:\d+(?:\.\d+)?|\.\d+)$/.test(rateText)) throw new Error(rateMessage);
 		const daiRate = Number(rateText);
 		if (!Number.isFinite(daiRate) || daiRate < 0) throw new Error(rateMessage);
@@ -48062,7 +48062,7 @@ function parseAnnualSacCatalog(sheet) {
 	const columns = {}, headerMessage = "La hoja anual debe tener tres columnas con encabezados Partida SAC, Descripción y DAI (%).";
 	sheet.getRow(1).eachCell((cell, index) => {
 		const value = tariffCellValue(cell);
-		if (!clean$8(value)) return;
+		if (!clean$9(value)) return;
 		const field = annualSacHeaders.get(header(value).replace(/[()]/g, ""));
 		if (!field || columns[field]) throw new Error(headerMessage);
 		columns[field] = index;
@@ -48073,7 +48073,7 @@ function parseAnnualSacCatalog(sheet) {
 		if (index === 1) return;
 		let hasValues = false;
 		row.eachCell((cell, column) => {
-			if (!clean$8(tariffCellValue(cell))) return;
+			if (!clean$9(tariffCellValue(cell))) return;
 			if (!usedColumns.has(column)) throw new Error(`Fila ${index}. La hoja anual solo admite las columnas Partida SAC, Descripción y DAI (%).`);
 			hasValues = true;
 		});
@@ -48099,13 +48099,13 @@ function parseTariffCatalog(book) {
 	if (!rulesSheet || !sacSheet) throw new Error("El maestro debe incluir REGLAS y SAC.");
 	const rules = [], sacRows = [];
 	rulesSheet.eachRow((row, index) => {
-		if (index > 1 && clean$8(tariffCellValue(row.getCell(1)))) rules.push({
+		if (index > 1 && clean$9(tariffCellValue(row.getCell(1)))) rules.push({
 			id: `ARAN-${index}`,
-			code: clean$8(tariffCellValue(row.getCell(1))),
-			description: clean$8(tariffCellValue(row.getCell(2))),
+			code: clean$9(tariffCellValue(row.getCell(1))),
+			description: clean$9(tariffCellValue(row.getCell(2))),
 			daiRate: numeric(tariffCellValue(row.getCell(5))),
 			iscRate: numeric(tariffCellValue(row.getCell(6))),
-			union: clean$8(tariffCellValue(row.getCell(7))),
+			union: clean$9(tariffCellValue(row.getCell(7))),
 			active: true,
 			source: trace(rulesSheet, index, {
 				code: 1,
@@ -48116,14 +48116,14 @@ function parseTariffCatalog(book) {
 		});
 	});
 	sacSheet.eachRow((row, index) => {
-		const sac = clean$8(tariffCellValue(row.getCell(1)));
+		const sac = clean$9(tariffCellValue(row.getCell(1)));
 		if (index > 1 && /^\d{4}\.\d{2}\.\d{2}\.\d{2}\.\d{2}$/.test(sac)) sacRows.push({
 			sac,
-			description: clean$8(tariffCellValue(row.getCell(2))),
+			description: clean$9(tariffCellValue(row.getCell(2))),
 			daiRate: numeric(tariffCellValue(row.getCell(4))),
 			iscRate: numeric(tariffCellValue(row.getCell(5))),
 			ivaRate: numeric(tariffCellValue(row.getCell(6))),
-			preferentialRates: Object.fromEntries(Array.from({ length: 11 }, (_, i) => [clean$8(tariffCellValue(sacSheet.getRow(1).getCell(i + 7))), tariffCellValue(row.getCell(i + 7))])),
+			preferentialRates: Object.fromEntries(Array.from({ length: 11 }, (_, i) => [clean$9(tariffCellValue(sacSheet.getRow(1).getCell(i + 7))), tariffCellValue(row.getCell(i + 7))])),
 			source: trace(sacSheet, index, {
 				sac: 1,
 				daiRate: 4,
@@ -105999,7 +105999,7 @@ var rate = (value, label, optional = false) => {
 	if (n != null && n > 100) throw new Error(`${label} debe estar entre 0 y 100.`);
 	return n;
 };
-var key$1 = (row) => `${text$3(row.oi)}:${text$3(row.normalizedArticle || row.article)}:${text$3(row.line)}`;
+var key$2 = (row) => `${text$3(row.oi)}:${text$3(row.normalizedArticle || row.article)}:${text$3(row.line)}`;
 var kinds = [
 	"oi",
 	"sia",
@@ -106092,8 +106092,8 @@ function sourceRows(kind, input, oi, shipment, allowJdeArticle = false) {
 			out.fob = number$1(row.fob, "FOB");
 			out.cif = number$1(row.cif, "CIF", true);
 		}
-		if (seen.has(key$1(out))) throw new Error(`La línea ${article} / ${line} está duplicada. No se cargó la versión.`);
-		seen.add(key$1(out));
+		if (seen.has(key$2(out))) throw new Error(`La línea ${article} / ${line} está duplicada. No se cargó la versión.`);
+		seen.add(key$2(out));
 		return out;
 	});
 }
@@ -107162,18 +107162,32 @@ var administrators = [
 	"Administrador",
 	"Administración"
 ];
-function managesTransport(state) {
-	return [
-		...administrators,
-		"Importaciones",
-		"JefeImportaciones"
-	].includes(state.ui?.role || "Admin");
+var managers = ["Importaciones", "JefeImportaciones"];
+var creators = [
+	...managers,
+	...administrators,
+	"Compras",
+	"JefeCompras"
+];
+var TRANSPORT_ROLE_POLICY = "DEC-386";
+var REPLAY_LEGACY_TRANSPORT_ROLE = Symbol("replayLegacyTransportRole");
+var roleOf$1 = (state) => state.ui?.role || "Admin";
+var ownsRequest = (state, request) => request.actor === (state.ui?.actor || roleOf$1(state));
+function managesTransport(state, legacy = false) {
+	const role = roleOf$1(state);
+	return managers.includes(role) || legacy && administrators.includes(role);
 }
 function transportAccess(state) {
-	return state.ui?.designVersion === "v18" && (managesTransport(state) || ["Compras", "JefeCompras"].includes(state.ui.role));
+	return state.ui?.designVersion === "v18" && creators.includes(roleOf$1(state));
 }
 function canSeeRequest(state, request) {
-	return transportAccess(state) && (managesTransport(state) || state.ui.role === "JefeCompras" || request.actor === (state.ui.actor || state.ui.role));
+	return transportAccess(state) && (managesTransport(state) || administrators.includes(roleOf$1(state)) || roleOf$1(state) === "JefeCompras" || ownsRequest(state, request));
+}
+function isTransportDraft(request) {
+	return Boolean(request && !request.cancelledAt && !request.selected && !request.mail.length && !request.offers.length);
+}
+function canEditTransportDraft(state, request) {
+	return isTransportDraft(request) && transportAccess(state) && (managesTransport(state) || !request.pending && ownsRequest(state, request));
 }
 //#endregion
 //#region src/state/followupLabels.js
@@ -109607,7 +109621,10 @@ function assertRoleCommand(state, action) {
 		].some((id) => observedCosteoHistory(state.expedientes.find((exp) => exp.id === id)))) throw Error("El resultado histórico recibido solo permite consulta; su reapertura no está definida.");
 	}
 	if (action.type.startsWith("TRANSPORT_")) {
-		if (!transportAccess(effective) || action.type !== "TRANSPORT_CREATE" && !managesTransport(effective)) throw Error("Esta acción corresponde a Importaciones.");
+		const legacy = action[REPLAY_LEGACY_TRANSPORT_ROLE];
+		const draftAction = ["TRANSPORT_CREATE", "TRANSPORT_EDIT"].includes(action.type) && (!action.payload?.prepare || legacy);
+		const legacyCancel = legacy && action.type === "TRANSPORT_CANCEL";
+		if (!transportAccess(effective) || !draftAction && !legacyCancel && !managesTransport(effective, legacy)) throw Error("Esta acción corresponde a Importaciones.");
 		return;
 	}
 	if (isAdmin(effective)) return;
@@ -110288,15 +110305,336 @@ function invalidateChangedTariffGroups(state, action) {
 	return state;
 }
 //#endregion
+//#region src/modules/transportista/requestDetails.js
+var clean$8 = (value) => String(value ?? "").trim();
+var key$1 = (value) => clean$8(value).normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+var requirements = [
+	"Flete internacional",
+	"Recolección",
+	"Gastos de origen",
+	"Documentación",
+	"Recargos",
+	"Gastos de destino",
+	"Transporte final",
+	"Tránsito y ETD/ETA",
+	"Agente en origen"
+];
+requirements.slice(0, 7);
+var modes = [
+	"Marítimo",
+	"Aéreo",
+	"Terrestre"
+];
+var cargoTypes = [
+	"Regular",
+	"Peligrosa",
+	"Refrigerada",
+	"Sobredimensionada"
+];
+var incoterms = [
+	"EXW",
+	"FCA",
+	"FAS",
+	"FOB",
+	"CFR",
+	"CIF",
+	"CPT",
+	"CIP",
+	"DAP",
+	"DPU",
+	"DDP"
+];
+var cubicDivisors = {
+	mm: 1e9,
+	cm: 1e6,
+	m: 1
+};
+var volumeFormat = new Intl.NumberFormat("es-NI", {
+	minimumFractionDigits: 3,
+	maximumFractionDigits: 9
+});
+var tinyVolumeFormat = new Intl.NumberFormat("es-NI", {
+	notation: "scientific",
+	maximumFractionDigits: 8
+});
+var active = (rows) => (rows || []).filter((row) => row.active !== false);
+function choiceRows(state, catalog) {
+	return active(state.catalogs?.[catalog]).filter((row) => clean$8(row.label));
+}
+function transportChoices(state) {
+	return {
+		mode: [...new Set([...modes, ...choiceRows(state, "transportTypes").map((row) => row.label)])],
+		cargoType: [...new Set([...cargoTypes, ...choiceRows(state, "cargoTypes").map((row) => row.label)])],
+		incoterm: [...new Set([...incoterms, ...incotermOptions(state)])]
+	};
+}
+function merchandiseSuppliers(state, company) {
+	return supplierDirectory(state).filter((row) => row.type === "merchandise" && row.enabled).map((row) => row.record).filter((row) => !company || (row.associatedCompanies?.length ? row.associatedCompanies.some((label) => key$1(label) === key$1(company)) : !row.company || key$1(row.company) === key$1(company)));
+}
+function countries(state) {
+	const rows = choiceRows(state, "origins");
+	return rows.some((row) => key$1(row.label) === "nicaragua") ? rows : [...rows, { label: "Nicaragua" }];
+}
+function importerOptions(state, supplier, company) {
+	if (!supplier) return {
+		choices: [],
+		suggested: ""
+	};
+	const master = getSupplierMaster(state, supplier.label, company) || supplier;
+	const catalog = new Map(choiceRows(state, "importers").map((row) => [key$1(row.label), row.label]));
+	const linked = [...new Set([master.importer, ...master.authorizedImporters || []].map((label) => catalog.get(key$1(label))).filter(Boolean))];
+	return {
+		choices: linked.length ? linked : [...catalog.values()],
+		suggested: linked.length === 1 ? linked[0] : ""
+	};
+}
+function terminals(state, mode, country) {
+	if (mode === "Terrestre") return [];
+	const rows = mode === "Aéreo" ? [...choiceRows(state, "airports"), ...choiceRows(state, "ports").filter((row) => /aer|air/i.test(clean$8(row.type || row.mode || row.label)))] : choiceRows(state, "ports").filter((row) => !/aer|air/i.test(clean$8(row.type || row.mode || row.label)));
+	return [...new Map(rows.filter((row) => !(row.country || row.origin) || !country || key$1(row.country || row.origin) === key$1(country)).map((row) => [row.label, row])).values()];
+}
+var emptyPack = () => ({
+	kind: "Pallet",
+	quantity: "",
+	length: "",
+	width: "",
+	height: "",
+	unit: "mm"
+});
+var initialDetails = () => ({
+	company: "",
+	supplierId: "",
+	importer: "",
+	reference: "",
+	incoterm: "",
+	cargoType: "",
+	mode: "",
+	description: "",
+	weight: "",
+	packages: "",
+	pallets: "",
+	packing: [emptyPack()],
+	declaredCbm: "",
+	volumeChoice: "",
+	originCountry: "",
+	originCity: "",
+	departure: "",
+	pickup: "",
+	originContact: "",
+	destinationCountry: "",
+	destinationCity: "",
+	arrival: "",
+	delivery: "",
+	scope: "final",
+	requirements: [],
+	notes: ""
+});
+var textFields = Object.keys(initialDetails()).filter((field) => !["packing", "requirements"].includes(field));
+function packingVolume(row) {
+	const divisor = cubicDivisors[row.unit];
+	const dims = [
+		row.length,
+		row.width,
+		row.height
+	].map(Number);
+	const count = Number(row.quantity);
+	if (!divisor || !(count > 0 && Number.isFinite(count)) || !dims.every((n) => n > 0 && Number.isFinite(n))) return 0;
+	const volume = dims.reduce((product, n) => product * n, count) / divisor;
+	return Number.isFinite(volume) ? volume : 0;
+}
+function computedVolume(details) {
+	return (details.packing || []).reduce((sum, row) => sum + packingVolume(row), 0);
+}
+var differs = (details) => details.declaredCbm !== "" && Math.abs(Number(details.declaredCbm) - computedVolume(details)) >= 5e-4;
+var selectedVolume = (details) => details.volumeChoice === "declared" && details.declaredCbm !== "" ? Number(details.declaredCbm) : computedVolume(details);
+var routeLabel = (details) => [details.departure || details.originCity || details.originCountry, details.arrival || details.destinationCity || details.destinationCountry].filter(Boolean).join(" → ");
+var scopeLabel = (details) => details.scope !== "terminal" ? "Hasta destino final" : details.mode === "Aéreo" ? "Aeropuerto a aeropuerto" : "Puerto a puerto";
+function formatVolume(value) {
+	const volume = Number(value);
+	return (volume > 0 && volume < 1e-9 ? tinyVolumeFormat : volumeFormat).format(volume);
+}
+var money = (item) => item.currency + " " + Number(item.amount ?? item.total).toLocaleString("es-NI", {
+	minimumFractionDigits: 2,
+	maximumFractionDigits: 2
+});
+var offerMoney = (offer) => offerTotals(offer).map(money).join(" · ");
+function normalizeDetails(state, raw) {
+	const details = Object.fromEntries(textFields.map((field) => [field, clean$8(raw[field])]));
+	const choices = transportChoices(state);
+	for (const [field, rows] of [
+		["company", choiceRows(state, "companies")],
+		["originCountry", countries(state)],
+		["destinationCountry", countries(state)],
+		...Object.entries(choices).map(([field, labels]) => [field, labels.map((label) => ({ label }))]),
+		["departure", terminals(state, details.mode, details.originCountry)],
+		["arrival", terminals(state, details.mode, details.destinationCountry)]
+	]) if (details[field] && !rows.some((row) => row.label === details[field])) throw Error("Selecciona un valor vigente para " + fieldLabel(field) + ".");
+	const supplier = merchandiseSuppliers(state, details.company).find((row) => row.id === details.supplierId);
+	if (details.supplierId && !supplier) throw Error("Selecciona un proveedor vigente para la compañía.");
+	const { choices: importers, suggested } = importerOptions(state, supplier, details.company);
+	if (details.importer && !importers.includes(details.importer)) throw Error("Selecciona un importador disponible para la solicitud.");
+	details.importer ||= suggested;
+	if (clean$8(raw.catalogNote)) details.catalogNote = clean$8(raw.catalogNote);
+	details.supplierName = supplier?.label || "";
+	details.scope = details.mode !== "Terrestre" && details.scope === "terminal" ? "terminal" : "final";
+	details.packing = (Array.isArray(raw.packing) ? raw.packing : []).map((row) => Object.fromEntries(Object.keys(emptyPack()).map((field) => [field, clean$8(row[field])])));
+	details.requirements = Array.isArray(raw.requirements) ? requirements.filter((item) => raw.requirements.includes(item)) : [];
+	if (!differs(details)) details.volumeChoice = "";
+	return details;
+}
+function fieldLabel(field) {
+	return {
+		company: "Compañía",
+		originCountry: "País de origen",
+		destinationCountry: "País de destino",
+		departure: "Punto de despacho",
+		arrival: "Punto de llegada",
+		incoterm: "Incoterm",
+		cargoType: "Tipo de carga",
+		mode: "Modalidad"
+	}[field] || field;
+}
+function requestIssues(d) {
+	const issues = {};
+	for (const field of [
+		"mode",
+		"incoterm",
+		"cargoType",
+		"originCountry",
+		"destinationCountry"
+	]) if (!clean$8(d[field])) issues[field] = "Selecciona " + fieldLabel(field).toLowerCase() + ".";
+	if (!(Number(d.weight) > 0 && Number.isFinite(Number(d.weight)))) issues.weight = "Ingresa un peso mayor que cero.";
+	const rows = d.packing || [];
+	const count = (value) => Number.isInteger(Number(value)) && Number(value) > 0;
+	if (!count(d.packages) && !count(d.pallets) && !rows.some((row) => count(row.quantity))) issues.packing = "Ingresa la cantidad de bultos o embalajes.";
+	if ([d.packages, d.pallets].some((value) => value !== "" && (!Number.isInteger(Number(value)) || Number(value) < 0))) issues.packing = "Ingresa cantidades enteras no negativas.";
+	for (const row of rows) if ([
+		row.length,
+		row.width,
+		row.height
+	].some(Boolean) && (!count(row.quantity) || !packingVolume(row))) issues.packing = "Completa la cantidad y las tres dimensiones de cada embalaje medido.";
+	if (d.declaredCbm !== "" && !(Number(d.declaredCbm) > 0 && Number.isFinite(Number(d.declaredCbm)))) issues.declaredCbm = "Ingresa un CBM mayor que cero.";
+	else if (differs(d) && !["calculated", "declared"].includes(d.volumeChoice)) issues.declaredCbm = "Confirma qué volumen se usará en el correo.";
+	if (d.mode && d.mode !== "Terrestre") {
+		if (!d.departure && !clean$8(d.originCity)) issues.departure = "Indica el punto o la ciudad de origen.";
+		if (!d.arrival && (d.scope === "terminal" || !clean$8(d.destinationCity))) issues.arrival = "Indica el punto de llegada o la ciudad final.";
+	} else if (d.mode === "Terrestre") {
+		if (!clean$8(d.originCity)) issues.originCity = "Indica la ciudad de origen.";
+		if (!clean$8(d.destinationCity)) issues.destinationCity = "Indica la ciudad final.";
+	}
+	return issues;
+}
+function requestSubject(request) {
+	const d = request.details;
+	if (!d) return "Solicitud de cotización " + request.code;
+	return [
+		"[Solicitud de cotización] " + [d.mode, d.incoterm].filter(Boolean).join(" "),
+		[d.originCountry, [d.destinationCity, d.destinationCountry].filter(Boolean).join(", ")].filter(Boolean).join(" – "),
+		request.code
+	].filter(Boolean).join(" | ");
+}
+function structuredBody(d, contact = "") {
+	const lines = [
+		["Compañía", d.company],
+		["Referencia interna", d.reference],
+		["Proveedor de mercancía", d.supplierName],
+		["Importador", d.importer],
+		["Modalidad", d.mode],
+		["Incoterm", d.incoterm],
+		["Tipo de carga", d.cargoType],
+		["Mercancía", d.description],
+		["Peso total", d.weight && d.weight + " kg"],
+		["Bultos", d.packages],
+		["Pallets", d.pallets],
+		["Volumen", selectedVolume(d) > 0 && formatVolume(selectedVolume(d)) + " m³"],
+		["Origen", [d.originCountry, d.originCity].filter(Boolean).join(" · ")],
+		["Despacho", d.departure],
+		["Recolección", d.pickup],
+		["Contacto en origen", d.originContact],
+		["Llegada", d.arrival],
+		["Destino", [d.destinationCity, d.destinationCountry].filter(Boolean).join(", ")],
+		["Entrega", d.delivery],
+		["Alcance", scopeLabel(d)],
+		["Requisitos", d.requirements.join(", ")],
+		["Observaciones", d.notes]
+	].filter(([, value]) => value).map(([label, value]) => label + ": " + value);
+	const packing = d.packing.filter((row) => Number(row.quantity) > 0).map((row) => row.quantity + " × " + row.kind + ([
+		row.length,
+		row.width,
+		row.height
+	].every(Boolean) ? " · " + [
+		row.length,
+		row.width,
+		row.height
+	].join(" × ") + " " + row.unit + " por unidad" : ""));
+	return [
+		contact ? "Hola, " + contact + ":" : "Estimado proveedor:",
+		"",
+		"Solicitamos una cotización de transporte.",
+		"",
+		...lines,
+		...packing.length ? ["Embalajes:", ...packing] : [],
+		"",
+		"Saludos cordiales."
+	].join("\n");
+}
+function offerTotals(offer) {
+	if (!offer?.costs?.length) return offer ? [{
+		currency: offer.currency,
+		amount: offer.amount
+	}] : [];
+	const totals = /* @__PURE__ */ new Map();
+	for (const row of offer.costs) if (clean$8(row.amount) !== "") totals.set(row.currency, (totals.get(row.currency) || 0) + Math.round(Number(row.amount) * 100));
+	return [...totals].map(([currency, cents]) => ({
+		currency,
+		amount: cents / 100
+	}));
+}
+function matchingLogistics(exp, details, individual, carrier) {
+	if (!details) return exp;
+	if (key$1(exp.transportType || exp.importaciones?.shipment?.mode) && details.mode && key$1(exp.transportType || exp.importaciones?.shipment?.mode) !== key$1(details.mode)) return exp;
+	const previous = exp.importaciones || {};
+	const shipment = { ...previous.shipment };
+	const proposed = {
+		originCountry: details.originCountry,
+		departurePort: details.mode === "Marítimo" ? details.departure : "",
+		...individual && {
+			packages: details.packages,
+			cbm: selectedVolume(details) > 0 ? selectedVolume(details) : ""
+		}
+	};
+	for (const [field, value] of Object.entries(proposed)) if ((shipment[field] === void 0 || shipment[field] === null || shipment[field] === "") && value !== "") shipment[field] = value;
+	const transport = previous.transport?.provider || !carrier ? previous.transport : {
+		...previous.transport,
+		provider: carrier
+	};
+	return {
+		...exp,
+		importaciones: {
+			...previous,
+			shipment,
+			...transport && { transport }
+		}
+	};
+}
+//#endregion
 //#region src/modules/transportista/domain.js
 var clean$7 = (value) => String(value ?? "").trim();
 var ensure = (ok, message) => {
 	if (!ok) throw new Error(message);
 };
-var carriers = (state) => supplierDirectory(state).filter((row) => row.enabled && row.record.active !== null && row.record.es_transportista === true).map((row) => row.record);
+var carriers = (state) => supplierDirectory(state).filter((row) => row.type === "service" && row.enabled && row.record.active !== null && row.record.es_transportista === true).map((row) => row.record);
+function offerContact(request, carrier) {
+	const invitation = request.mail.findLast((mail) => mail.type === "solicitud" && mail.carrierId === carrier?.id);
+	return invitation?.contact || invitation?.to || carrier?.contact || "";
+}
 var chosenOffer = (request) => request.offers.find((item) => item.id === request.selected);
 var sameBL = (a, b) => clean$7(a).toUpperCase() === clean$7(b).toUpperCase();
 var mailAddress = (value) => /^[^\s@,;]+@[^\s@,;]+\.[^\s@,;]+$/.test(value);
+var checkReady = (details) => {
+	const issues = Object.values(requestIssues(details));
+	ensure(!issues.length, issues.join(" "));
+};
 function shipmentScope(state, link) {
 	if (!link) return null;
 	const active = state.expedientes.filter((exp) => !expedienteDeleted(exp));
@@ -110327,6 +110665,7 @@ function freightInvoices(state, request) {
 	return [...found.values()];
 }
 function tariffMessage(request, fields) {
+	if (request.details) return structuredBody(request.details, fields?.contact);
 	return [
 		request.summary,
 		fields.mode,
@@ -110334,28 +110673,53 @@ function tariffMessage(request, fields) {
 		fields.notes
 	].map(clean$7).filter(Boolean).join("\n");
 }
-function awardMessage(request, offer) {
-	return "Confirmamos su oferta para " + request.code + ": " + offer.currency + " " + offer.amount + (offer.line ? " · " + offer.line : "") + ".";
+var awardSubject = (request) => "Adjudicación de transporte · " + request.code;
+function awardMessage(request, offer, carrier) {
+	const contact = clean$7(offer.contact || offerContact(request, carrier));
+	const greeting = contact && !contact.includes("@") ? "Hola, " + contact + ":" : "Estimado equipo de " + offer.carrier + ":";
+	const terms = [
+		["Ruta", request.route],
+		["Alcance", offer.scope],
+		["Tarifa cotizada", offerMoney(offer)],
+		["Naviera", offer.line]
+	].filter(([, value]) => value).map(([label, value]) => label + ": " + value);
+	return [
+		greeting,
+		"",
+		"Hemos seleccionado su cotización para la solicitud de transporte " + request.code + ".",
+		"",
+		...terms,
+		"",
+		"Por favor, confirmen la disponibilidad e indíquennos los próximos pasos para coordinar el embarque.",
+		"",
+		"Saludos cordiales,",
+		"Equipo de Importaciones"
+	].join("\n");
 }
 function carrierRecord(state, id) {
 	const record = carriers(state).find((item) => item.id === id);
 	ensure(record, "Selecciona un transportista activo del catálogo de proveedores.");
 	return record;
 }
-function messageTo(record, type, request, body, action) {
-	const cc = clean$7(record.cc).split(/[;,]/).map(clean$7).filter(Boolean);
-	ensure(mailAddress(record.email) && cc.every(mailAddress), "Revisa los correos de " + record.label + " en el catálogo.");
+function messageTo(record, type, request, body, action, edits = {}) {
+	const cc = clean$7(edits.cc ?? record.cc).split(/[;,]/).map(clean$7).filter(Boolean);
+	const to = clean$7(edits.to ?? record.email);
+	ensure(mailAddress(to) && cc.every(mailAddress), "Revisa los correos de " + record.label + ".");
+	const subject = clean$7(edits.subject ?? (type === "solicitud" ? requestSubject(request) : awardSubject(request)));
+	const content = clean$7(edits.body ?? body);
+	ensure(subject && content, "Completa asunto y cuerpo para " + record.label + ".");
 	return {
 		type,
 		carrierId: record.id,
 		carrier: record.label,
-		to: record.email,
+		contact: record.contact || "",
+		to,
 		cc,
 		at: action.at,
 		actor: action.actor,
 		simulated: true,
-		subject: (type === "solicitud" ? "Solicitud de cotización " : "Confirmación de oferta ") + request.code,
-		body,
+		subject,
+		body: content,
 		documentId: type === "solicitud" ? request.documentId : null
 	};
 }
@@ -110369,6 +110733,7 @@ function reduceTransport(state, action) {
 			actor: action.actor || state.ui.actor
 		}
 	};
+	const legacy = action[REPLAY_LEGACY_TRANSPORT_ROLE];
 	let request = requests.find((item) => item.key === p.requestKey);
 	let next = state;
 	const recordFile = (file, type) => {
@@ -110383,7 +110748,9 @@ function reduceTransport(state, action) {
 	};
 	if (action.type === "TRANSPORT_CREATE") {
 		ensure(!request && clean$7(p.requestKey), "La solicitud ya existe o carece de identificador.");
-		ensure(clean$7(p.origin) && clean$7(p.summary), "Indica el origen y los datos recibidos de la carga.");
+		if (!p.details) ensure(clean$7(p.origin) && clean$7(p.summary), "Indica el origen y los datos recibidos de la carga.");
+		const details = p.details && normalizeDetails(state, p.details);
+		if (details && p.prepare) checkReady(details);
 		const year = String(action.at).slice(0, 4), count = requests.filter((item) => item.code.startsWith("CT-" + year + "-")).length + 1;
 		request = {
 			key: p.requestKey,
@@ -110399,31 +110766,99 @@ function reduceTransport(state, action) {
 			events: [],
 			documentId: p.file ? recordFile(p.file, "carga") : null
 		};
+		if (details) request = {
+			...request,
+			details,
+			supplier: details.supplierName,
+			summary: details.description,
+			mode: details.mode,
+			route: routeLabel(details),
+			notes: details.notes,
+			pending: Boolean(p.prepare)
+		};
 	} else {
 		ensure(request && canSeeRequest(scopeState, request), "La solicitud no está disponible.");
 		const offer = chosenOffer(request);
 		switch (action.type) {
+			case "TRANSPORT_EDIT": {
+				ensure(isTransportDraft(request), "La solicitud ya inició su cotización o está cerrada.");
+				ensure(legacy || canEditTransportDraft(scopeState, request), "Puedes editar tus borradores antes de que Importaciones los gestione.");
+				const details = normalizeDetails(state, p.details || {});
+				if (p.prepare) checkReady(details);
+				request = {
+					...request,
+					details,
+					supplier: details.supplierName || (!request.details ? request.supplier : ""),
+					summary: details.description,
+					mode: details.mode,
+					route: routeLabel(details),
+					notes: details.notes,
+					pending: Boolean(p.prepare),
+					documentId: p.file ? recordFile(p.file, "carga") : request.documentId
+				};
+				break;
+			}
+			case "TRANSPORT_CANCEL":
+				ensure(!offer && !request.cancelledAt, "Solo se puede cancelar una solicitud abierta.");
+				ensure(managesTransport(scopeState, legacy) || legacy && !request.mail.length && !request.offers.length, "La cancelación corresponde a Importaciones.");
+				request = {
+					...request,
+					cancelledAt: action.at,
+					cancelReason: clean$7(p.reason),
+					pending: false
+				};
+				break;
+			case "TRANSPORT_COMPARE":
+				ensure(!offer && !request.cancelledAt && request.offers.length > 0, "No hay ofertas abiertas para evaluar.");
+				if (request.evaluating) return state;
+				request = {
+					...request,
+					evaluating: true
+				};
+				break;
 			case "TRANSPORT_INVITE": {
-				ensure(!offer && p.recipientIds?.length, "Selecciona al menos un destinatario en una solicitud abierta.");
+				ensure(!request.cancelledAt && !offer && p.recipientIds?.length, "Selecciona al menos un destinatario en una solicitud abierta.");
+				if (request.details) checkReady(request.details);
 				const ids = [...new Set(p.recipientIds)];
 				ensure(ids.every((id) => !request.mail.some((m) => m.type === "solicitud" && m.carrierId === id)), "Ya se registró el envío a ese proveedor.");
-				const fields = {
+				const fields = request.details ? {
+					mode: request.details.mode,
+					route: routeLabel(request.details),
+					notes: request.details.notes
+				} : {
 					mode: clean$7(p.mode),
 					route: clean$7(p.route),
 					notes: clean$7(p.notes)
 				};
-				const mail = ids.map((id) => messageTo(carrierRecord(state, id), "solicitud", request, tariffMessage(request, fields), action));
+				const mail = ids.map((id) => {
+					const carrier = carrierRecord(state, id);
+					return messageTo(carrier, "solicitud", request, tariffMessage(request, {
+						...fields,
+						contact: carrier.contact
+					}), action, p.edits?.[id]);
+				});
 				request = {
 					...request,
 					...fields,
+					pending: false,
 					mail: [...request.mail, ...mail]
 				};
 				break;
 			}
 			case "TRANSPORT_OFFER": {
-				ensure(!offer, "La solicitud ya está cerrada.");
-				const record = carrierRecord(state, p.carrierId), amount = Number(p.amount);
-				ensure(Number.isFinite(amount) && amount > 0 && /^[A-Z]{3}$/.test(clean$7(p.currency)), "Revisa el importe y la moneda de la oferta.");
+				ensure(!offer && !request.cancelledAt, "La solicitud ya está cerrada.");
+				const record = carrierRecord(state, p.carrierId);
+				const costs = Array.isArray(p.costs) && p.costs.filter((row) => clean$7(row.amount) !== "").map((row) => ({
+					concept: clean$7(row.concept),
+					currency: clean$7(row.currency),
+					amount: Number(row.amount)
+				}));
+				if (costs) ensure(costs.length && costs.every((row) => row.concept && /^[A-Z]{3}$/.test(row.currency) && Number.isFinite(row.amount) && row.amount >= 0) && costs.some((row) => row.amount > 0), "Revisa el desglose de costos y monedas.");
+				const [total] = costs ? offerTotals({ costs }) : [{
+					amount: Number(p.amount),
+					currency: clean$7(p.currency)
+				}];
+				ensure(Number.isFinite(total.amount) && /^[A-Z]{3}$/.test(total.currency) && (costs || total.amount > 0), "Revisa el importe y la moneda de la oferta.");
 				const terms = Object.fromEntries([
 					"line",
 					"route",
@@ -110431,7 +110866,14 @@ function reduceTransport(state, action) {
 					"freeDays",
 					"validUntil",
 					"departure",
-					"notes"
+					"notes",
+					"scope",
+					"receivedAt",
+					"contact",
+					"frequency",
+					"arrival",
+					"payment",
+					"exclusions"
 				].map((key) => [key, clean$7(p[key])]));
 				for (const key of ["transit", "freeDays"]) ensure(!terms[key] || /^\d+$/.test(terms[key]), "Los días deben ser enteros positivos o cero.");
 				const entry = {
@@ -110439,8 +110881,8 @@ function reduceTransport(state, action) {
 					id: action.id,
 					carrierId: record.id,
 					carrier: record.label,
-					amount,
-					currency: p.currency,
+					...total,
+					...costs && { costs },
 					documentId: recordFile(p.file, "oferta"),
 					source: "Outlook · carga manual",
 					actor: action.actor,
@@ -110453,7 +110895,7 @@ function reduceTransport(state, action) {
 				break;
 			}
 			case "TRANSPORT_SELECT":
-				ensure(!offer && request.offers.some((row) => row.id === p.offerId), "Selecciona una oferta vigente para cerrar.");
+				ensure(!request.cancelledAt && !offer && request.offers.some((row) => row.id === p.offerId), "Selecciona una oferta vigente para cerrar.");
 				request = {
 					...request,
 					selected: p.offerId,
@@ -110462,10 +110904,12 @@ function reduceTransport(state, action) {
 				break;
 			case "TRANSPORT_NOTIFY": {
 				ensure(offer && !request.mail.some((m) => m.type === "adjudicación"), "Revisa la oferta elegida y su aviso.");
-				const body = awardMessage(request, offer);
+				const recipient = carrierRecord(state, offer.carrierId);
+				const body = legacy ? "Confirmamos su oferta para " + request.code + ": " + offerTotals(offer).map((item) => item.currency + " " + item.amount).join(" + ") + (offer.line ? " · " + offer.line : "") + "." : awardMessage(request, offer, recipient);
+				const overrides = legacy ? { subject: "Confirmación de oferta " + request.code } : {};
 				request = {
 					...request,
-					mail: [...request.mail, messageTo(carrierRecord(state, offer.carrierId), "adjudicación", request, body, action)]
+					mail: [...request.mail, messageTo(recipient, "adjudicación", request, body, action, overrides)]
 				};
 				break;
 			}
@@ -110484,6 +110928,13 @@ function reduceTransport(state, action) {
 						at: action.at
 					}
 				};
+				if (request.details) {
+					const ids = new Set(coverage.members.map((member) => member.id));
+					next = {
+						...next,
+						expedientes: next.expedientes.map((exp) => ids.has(exp.id) ? matchingLogistics(exp, request.details, ids.size === 1, offer.carrier) : exp)
+					};
+				}
 				break;
 			}
 			case "TRANSPORT_INVOICE": {
@@ -110506,7 +110957,8 @@ function reduceTransport(state, action) {
 		at: action.at,
 		actor: action.actor,
 		action: action.type,
-		area: "Transportista"
+		area: "Transportista",
+		...action.type === "TRANSPORT_CANCEL" && { result: request.cancelReason }
 	};
 	request = {
 		...request,
@@ -117479,6 +117931,10 @@ async function prepareEntry(action, ui, storeAttachment, after) {
 		insuranceServicePolicy: 1,
 		serviceInvoiceScopePolicy: 1
 	};
+	if (action.type.startsWith("TRANSPORT_")) currentAction = {
+		...currentAction,
+		transportRolePolicy: TRANSPORT_ROLE_POLICY
+	};
 	const entry = {
 		version: 1,
 		action: await encode(currentAction, storeAttachment),
@@ -117520,6 +117976,7 @@ function applyJournalEntries(state, entries) {
 		if (usesCosteoSourcePolicy(action.type) && action.costeoSourcePolicy !== "DEC-330") action[REPLAY_LEGACY_COSTEO_SOURCES] = true;
 		if (action.type === "IMPORT_SAVE_SERVICE" && !action.insuranceServicePolicy) action[REPLAY_LEGACY_INSURANCE_SERVICE] = true;
 		if (action.type === "IMPORT_SAVE_SERVICE" && !action.serviceInvoiceScopePolicy) action[REPLAY_LEGACY_SERVICE_INVOICE] = true;
+		if (action.type.startsWith("TRANSPORT_") && !action.transportRolePolicy) action[REPLAY_LEGACY_TRANSPORT_ROLE] = true;
 		state = sessionReducer(before, action);
 	}
 	return state;
@@ -117543,7 +118000,7 @@ function restoreJournalUI(initial, state, { pendingReplay = false } = {}) {
 }
 //#endregion
 //#region src/adapters/web/startupRead.js
-var webCheckpointContract = "cad1db9617602be5662831ce5bf67be286168df60018b5e35850e1c3fc436504";
+var webCheckpointContract = "e54d6739dbec89e6a118142a22ae0c6f50b836da761aef1fd3a5871389a41591";
 var startupRequest;
 function stateReadPath(simple, contract) {
 	const params = new URLSearchParams();
@@ -119454,7 +119911,7 @@ var checkpointAssetBase = "/demo-app-importaciones-cp/";
 var checkpointProcessorContract = webCheckpointContract;
 async function buildStartupCheckpoint(state, readPublishedAsset) {
 	const prior = state.checkpoint;
-	if (!Number.isSafeInteger(state.revision) || state.revision < 1 || !Array.isArray(state.actions) || prior && prior.contract !== "cad1db9617602be5662831ce5bf67be286168df60018b5e35850e1c3fc436504" || (prior?.revision || 0) + state.actions.length !== state.revision) throw Error("No se puede consolidar una revisión incompleta.");
+	if (!Number.isSafeInteger(state.revision) || state.revision < 1 || !Array.isArray(state.actions) || prior && prior.contract !== "e54d6739dbec89e6a118142a22ae0c6f50b836da761aef1fd3a5871389a41591" || (prior?.revision || 0) + state.actions.length !== state.revision) throw Error("No se puede consolidar una revisión incompleta.");
 	const [initial, journal] = await Promise.all([prepareStartupSession({
 		designVersion: "v18",
 		deferArticleMaster: true,
