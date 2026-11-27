@@ -114511,9 +114511,11 @@ function serviceDraft(state, exp, draft, legacyVat = false, legacyDai = false) {
 		charges: (draft.charges || []).map((row) => classifiedCharge(state, row))
 	};
 	const commercial = purchaseCharges(exp);
-	if (commercial.length || draft.charges.some((row) => row.purchaseSource)) draft.charges = normalizeCharges(draft.charges.filter((row) => !row.purchaseSource).concat(commercial), state);
+	const refreshCommercial = commercial.length > 0 || draft.charges.some((row) => row.purchaseSource);
+	if (refreshCommercial) draft.charges = draft.charges.filter((row) => !row.purchaseSource).concat(commercial);
 	const sources = getCosteoDistributions(state, exp.id);
 	if (legacyVat && !sources.length) {
+		if (refreshCommercial) draft.charges = normalizeCharges(draft.charges, state);
 		if (!(draft.charges || []).some((row) => row.serviceSource) && !draft.sourceBulletinVat && !draft.sourceServiceIva) return draft;
 		const base = draft.sourceBulletinVat ? draft.sourceFiscalIvaBeforeBulletin ?? 0 : draft.sourceBaseIva ?? amount(draft.iva || 0) - amount(draft.sourceServiceIva || 0), nio = amount(base * configRate(state));
 		return {
@@ -118280,7 +118282,7 @@ function restoreJournalUI(initial, state, { pendingReplay = false } = {}) {
 }
 //#endregion
 //#region src/adapters/web/startupRead.js
-var webCheckpointContract = "a37adb9d5905bc4c2291da75d7728c39bee41b68afd9906ae47f1b001c413561";
+var webCheckpointContract = "f4412e427297120f1f66d6afcb00471843098825b7a41a52e9575ebc2006aba6";
 var startupRequest;
 function stateReadPath(simple, contract, after) {
 	const params = new URLSearchParams();
@@ -120227,7 +120229,7 @@ var checkpointAssetBase = "/demo-app-importaciones-cp/";
 var checkpointProcessorContract = webCheckpointContract;
 async function buildStartupCheckpoint(state, readPublishedAsset) {
 	const prior = state.checkpoint;
-	if (!Number.isSafeInteger(state.revision) || state.revision < 1 || !Array.isArray(state.actions) || prior && prior.contract !== "a37adb9d5905bc4c2291da75d7728c39bee41b68afd9906ae47f1b001c413561" || (prior?.revision || 0) + state.actions.length !== state.revision) throw Error("No se puede consolidar una revisión incompleta.");
+	if (!Number.isSafeInteger(state.revision) || state.revision < 1 || !Array.isArray(state.actions) || prior && prior.contract !== "f4412e427297120f1f66d6afcb00471843098825b7a41a52e9575ebc2006aba6" || (prior?.revision || 0) + state.actions.length !== state.revision) throw Error("No se puede consolidar una revisión incompleta.");
 	const [initial, journal] = await Promise.all([prepareStartupSession({
 		designVersion: "v18",
 		deferArticleMaster: true,
