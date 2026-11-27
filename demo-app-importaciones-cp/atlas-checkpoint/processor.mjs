@@ -2496,7 +2496,7 @@ function configuredProjectionConcepts(config) {
 	}));
 }
 //#endregion
-//#region ../../../../04_DEMO/02_app/node_modules/pdf-lib/dist/pdf-lib.esm.js
+//#region node_modules/pdf-lib/dist/pdf-lib.esm.js
 /*! *****************************************************************************
 Copyright (c) Microsoft Corporation. All rights reserved.
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use
@@ -118213,12 +118213,13 @@ function restoreJournalUI(initial, state, { pendingReplay = false } = {}) {
 }
 //#endregion
 //#region src/adapters/web/startupRead.js
-var webCheckpointContract = "490ddcf219d79430b0c93733637afce3e33e13593151399ad05408adc7f2f036";
+var webCheckpointContract = "244090b8a704859f266d0c734cdd913e91f3c11c0d082c06ab110c75cf15398f";
 var startupRequest;
-function stateReadPath(simple, contract) {
+function stateReadPath(simple, contract, after) {
 	const params = new URLSearchParams();
 	if (simple) params.set("workspace", "shared");
 	if (contract) params.set("checkpoint", contract);
+	if (after !== void 0) params.set("after", after);
 	return params.size ? "state?" + params : "state";
 }
 function takeSharedWebRead(url, fetchImpl) {
@@ -118329,8 +118330,8 @@ function webPersistenceChanges(before, after) {
 	};
 }
 async function retryTransient(operation, { read = false, onRetry = () => {} } = {}) {
-	const attempts = read ? 3 : 2;
-	const statuses = read ? [
+	const attempts = 3;
+	const statuses = [
 		408,
 		429,
 		500,
@@ -118338,7 +118339,7 @@ async function retryTransient(operation, { read = false, onRetry = () => {} } = 
 		503,
 		504,
 		546
-	] : [503];
+	];
 	for (let attempt = 1;; attempt++) try {
 		return await operation(attempt);
 	} catch (error) {
@@ -118350,10 +118351,8 @@ async function retryTransient(operation, { read = false, onRetry = () => {} } = 
 				status: error.status
 			});
 		}
-		if (read) {
-			onRetry("Se interrumpió la conexión. Estamos intentando recuperar la sesión…");
-			await new Promise((resolve) => setTimeout(resolve, attempt * 1e3));
-		}
+		if (read) onRetry("Se interrumpió la conexión. Estamos intentando recuperar la sesión…");
+		await new Promise((resolve) => setTimeout(resolve, attempt * (read ? 1e3 : 500)));
 	}
 }
 function attachmentPaths(value, paths) {
@@ -118380,7 +118379,7 @@ async function openWebDemo({ endpoint, alternateEndpoint, shared = false, storag
 		const result = await response.json().catch(() => null);
 		throw Object.assign(Error(result?.message || "No se pudo acceder al guardado de la demo."), { status: response.status });
 	}
-	const readRemote = (contract = "", firstRead = false) => {
+	const readRemote = (contract = "", firstRead = false, after) => {
 		const startingEndpoint = activeEndpoint;
 		return retryTransient(async (attempt) => {
 			const service = alternate && attempt === 2 ? startingEndpoint === endpoint ? alternate : endpoint : startingEndpoint;
@@ -118388,7 +118387,7 @@ async function openWebDemo({ endpoint, alternateEndpoint, shared = false, storag
 			const controller = new AbortController();
 			const timeout = setTimeout(() => controller.abort(), alternate && attempt === 1 ? 2e4 : 45e3);
 			try {
-				const path = stateReadPath(simple, contract);
+				const path = stateReadPath(simple, contract, after);
 				const remote = await (shared && firstRead && attempt === 1 && takeSharedWebRead(service + "/" + path, fetchImpl) || request(path, { signal: controller.signal }, {
 					service,
 					workspaceHeader: !simple
@@ -118400,7 +118399,7 @@ async function openWebDemo({ endpoint, alternateEndpoint, shared = false, storag
 			}
 		}, {
 			read: true,
-			onRetry: onStatus
+			onRetry: after === void 0 ? onStatus : void 0
 		});
 	};
 	const deferredHandles = /* @__PURE__ */ new Map();
@@ -118470,6 +118469,7 @@ async function openWebDemo({ endpoint, alternateEndpoint, shared = false, storag
 	else if (shared) onStatus("Demo compartida");
 	let pending = 0, failed = null, tail = Promise.resolve();
 	let resetting = false, resetKey, unsavedOpening = false;
+	let replayFrom;
 	const pendingSaves = [];
 	const rejectedSave = (error) => [
 		400,
@@ -118480,16 +118480,16 @@ async function openWebDemo({ endpoint, alternateEndpoint, shared = false, storag
 		422,
 		507
 	].includes(error.status);
-	const canRetryPending = () => Boolean(failed && pendingSaves.length && (!failed.status || [
+	const temporarySave = (error) => !error.status || [
 		408,
 		429,
 		500,
 		502,
 		503,
 		504,
-		507,
 		546
-	].includes(failed.status)));
+	].includes(error.status);
+	const canRetryPending = () => Boolean(failed && pendingSaves.length && (temporarySave(failed) || failed.status === 507));
 	const blockedSave = () => Object.assign(Error(canRetryPending() ? "Hay cambios de un guardado anterior pendientes. Usa Reintentar guardado en el menú lateral." : "Hay un guardado anterior sin confirmar. Vuelve a abrir ATLAS para comprobar qué quedó guardado."), {
 		cause: failed,
 		status: failed?.status
@@ -118510,6 +118510,38 @@ async function openWebDemo({ endpoint, alternateEndpoint, shared = false, storag
 	function assertWritable() {
 		if (resetting || resetKey) throw Error("Completa el restablecimiento de esta demo antes de guardar.");
 		if (failed) throw blockedSave();
+	}
+	async function readNewEntries(fromRevision, knownCount) {
+		const latest = await readRemote("", false, fromRevision);
+		const changes = latest.after === fromRevision ? latest.actions : latest.actions.slice(knownCount);
+		if (latest.revision - fromRevision !== changes.length) throw Object.assign(Error("ATLAS recibió una revisión incompatible con esta sesión."), { status: 409 });
+		return {
+			revision: latest.revision,
+			entries: await hydrateEntries(changes, latest.attachmentSizes)
+		};
+	}
+	let syncing = false;
+	async function syncFromServer(apply) {
+		if (!shared || syncing || pending || resetting) return;
+		syncing = true;
+		try {
+			if (failed && canRetryPending() && temporarySave(failed)) await retryPendingSave();
+			if (failed || pending || resetting) return;
+			const currentRevision = revision;
+			const { revision: from, actionCount: fromCount } = replayFrom || {
+				revision,
+				actionCount
+			};
+			const update = await readNewEntries(from, fromCount);
+			if (pending || failed || resetting || revision !== currentRevision || !update.entries.length) return;
+			if (await apply(update.entries)) {
+				revision = update.revision;
+				actionCount = fromCount + update.entries.length;
+				replayFrom = void 0;
+			}
+		} finally {
+			syncing = false;
+		}
 	}
 	async function write(action, ui, before, after, key, files, rememberFile, onProgress) {
 		const entry = await prepareEntry(action, ui, rememberFile, after);
@@ -118590,13 +118622,12 @@ async function openWebDemo({ endpoint, alternateEndpoint, shared = false, storag
 				} catch (error) {
 					if (!rebase || error.status !== 409) throw error;
 					if (attempt >= 2) throw Object.assign(Error("Hubo varios guardados al mismo tiempo. Tus datos siguen en pantalla. Intenta guardar de nuevo."), { status: 409 });
-					const latest = await readRemote();
-					const changes = latest.actions.slice(knownCount);
-					if (!changes.length || latest.revision - knownRevision !== changes.length) throw error;
-					entries.push(...await hydrateEntries(changes, latest.attachmentSizes));
+					const latest = await readNewEntries(knownRevision, knownCount);
+					if (!latest.entries.length) throw error;
+					entries.push(...latest.entries);
 					save = await rebase(entries);
 					revision = latest.revision;
-					actionCount = latest.actions.length;
+					actionCount += latest.entries.length;
 				}
 			}
 		}
@@ -118611,7 +118642,8 @@ async function openWebDemo({ endpoint, alternateEndpoint, shared = false, storag
 			showSaveStatus();
 		}, (error) => {
 			if (rebase) unsavedOpening = true;
-			if (!confirmed) pendingSaves.push(saveEntry);
+			if (!confirmed || temporarySave(error)) pendingSaves.push(saveEntry);
+			if (confirmed && shared && temporarySave(error)) replayFrom ||= startingPoint;
 			if (!confirmed || !rejectedSave(error)) failed ||= error;
 			if (startingPoint && rebase && !failed) ({revision, actionCount} = startingPoint);
 			showSaveStatus();
@@ -118660,6 +118692,7 @@ async function openWebDemo({ endpoint, alternateEndpoint, shared = false, storag
 			({revision} = await result.json());
 			actions.length = 0;
 			actionCount = 0;
+			replayFrom = void 0;
 			failed = null;
 			pendingSaves.length = 0;
 			onRetryAvailable(false);
@@ -118692,6 +118725,7 @@ async function openWebDemo({ endpoint, alternateEndpoint, shared = false, storag
 		reset,
 		guard,
 		retryPendingSave,
+		syncFromServer,
 		saveOpening: shared ? enqueue : void 0,
 		lookupSharedReview: shared ? lookupSharedReview : void 0,
 		get checkpoint() {
@@ -118749,6 +118783,7 @@ var catalogIndependentActions = new Set([
 	"IMPORT18_SET_TARIFF_MODE",
 	"PAY_CREATE",
 	"PAY_UPDATE_FOLLOWUP",
+	"PAY_SET_DUE_DATE",
 	"PAY_REFRESH_DUE_ALERTS",
 	"PAY_APPLY_REVOLVING_CREDIT",
 	"PAY_CREATE_REVOLVING_REPLENISHMENT",
@@ -118914,7 +118949,7 @@ function decodeStartupCheckpoint(initial, data, openAttachment) {
 	if (!Array.isArray(data)) throw invalid();
 	const [keys, changes, dictionary] = data;
 	if (!Array.isArray(keys) || !changes || Object.getPrototypeOf(changes) !== Object.prototype || !Array.isArray(dictionary) || new Set(keys).size !== keys.length || !keys.every((key) => typeof key === "string" && key !== "articleMaster" && (own(initial, key) || own(changes, key))) || !keys.includes("expedientes") || !keys.includes("documents") || !keys.includes("processedActions") || !keys.includes("ui")) throw invalid();
-	function decode(value, limit = dictionary.length) {
+	function decode(value, limit = dictionary.length, copy = false) {
 		if (!value || typeof value !== "object") return value;
 		if (own(value, marker)) {
 			const payload = value.value;
@@ -118929,24 +118964,23 @@ function decodeStartupCheckpoint(initial, data, openAttachment) {
 					].includes(payload)) return Number(payload);
 					break;
 				case "seed-file": {
-					const path = decode(payload, limit);
+					const path = decode(payload, limit, copy);
 					const file = Array.isArray(path) && path.reduce((object, key) => object && typeof key === "string" && own(object, key) ? object[key] : void 0, initial);
 					if (file instanceof Blob) return file;
 					break;
 				}
-				case "attachment": return openAttachment(decode(payload, limit));
+				case "attachment": return openAttachment(decode(payload, limit, copy));
 				case "shared":
-					if (Number.isSafeInteger(payload) && payload >= 0 && payload < limit) {
-						const shared = dictionary[payload];
-						return typeof shared === "string" ? shared : decode(structuredClone(shared), payload);
-					}
+					if (Number.isSafeInteger(payload) && payload >= 0 && payload < limit) return decode(dictionary[payload], payload, true);
 					break;
 			}
 			throw invalid();
 		}
-		for (const key of Object.keys(value)) if (Array.isArray(value) && value[key]?.[marker] === "hole") delete value[key];
-		else value[key] = decode(value[key], limit);
-		return value;
+		const array = Array.isArray(value);
+		const decoded = copy ? array ? new Array(value.length) : { ...value } : value;
+		for (const key of Object.keys(value)) if (array && value[key]?.[marker] === "hole") delete decoded[key];
+		else decoded[key] = decode(value[key], limit, copy);
+		return decoded;
 	}
 	const restored = Object.fromEntries(keys.map((key) => [key, own(changes, key) ? decode(changes[key]) : initial[key]]));
 	if (!Array.isArray(restored.expedientes) || !Array.isArray(restored.documents) || !Array.isArray(restored.processedActions) || !restored.ui) throw invalid();
@@ -120126,7 +120160,7 @@ var checkpointAssetBase = "/demo-app-importaciones-cp/";
 var checkpointProcessorContract = webCheckpointContract;
 async function buildStartupCheckpoint(state, readPublishedAsset) {
 	const prior = state.checkpoint;
-	if (!Number.isSafeInteger(state.revision) || state.revision < 1 || !Array.isArray(state.actions) || prior && prior.contract !== "490ddcf219d79430b0c93733637afce3e33e13593151399ad05408adc7f2f036" || (prior?.revision || 0) + state.actions.length !== state.revision) throw Error("No se puede consolidar una revisión incompleta.");
+	if (!Number.isSafeInteger(state.revision) || state.revision < 1 || !Array.isArray(state.actions) || prior && prior.contract !== "244090b8a704859f266d0c734cdd913e91f3c11c0d082c06ab110c75cf15398f" || (prior?.revision || 0) + state.actions.length !== state.revision) throw Error("No se puede consolidar una revisión incompleta.");
 	const [initial, journal] = await Promise.all([prepareStartupSession({
 		designVersion: "v18",
 		deferArticleMaster: true,
