@@ -42467,6 +42467,9 @@ function serviceInvoiceExpedientes(expedientes, company, supplier, number) {
 	if (!company || !vendor || !consecutive) return [];
 	return expedientes.filter((exp) => exp.company === company && !expedienteDeleted(exp) && exp.importaciones?.services?.some((service) => !service.insurancePolicy && !service.noAdditionalPayment && serviceIdentityKey(service.supplier) === vendor && serviceIdentityKey(service.number) === consecutive)).map((exp) => exp.id);
 }
+function serviceHasPaymentRequest(state, service) {
+	return Boolean(service?.paymentId || service && state.payments?.some((payment) => payment.applications?.some((row) => row.obligationId === service.id)));
+}
 //#endregion
 //#region src/modules/costeo/returns.js
 var pendingCosteoReturn = (exp) => exp?.costeo?.followup?.returns?.find((row) => row.status !== "accepted");
@@ -45138,6 +45141,35 @@ function addNotice(state, action, expedienteId, title, body, area = "Importacion
 function hasDocument(state, id) {
 	return (state.documents || []).some((document) => document.id === id && document.versions?.length);
 }
+function costeoDeliveryDocuments(state, exp, payload, legacy = false) {
+	const data = importState(exp), invoice = importInvoice(exp);
+	const p = payload ?? {
+		invoiceId: invoice?.id,
+		invoiceDocumentId: invoice?.documentId
+	};
+	if (data.review.status !== "confirmado" || !data.review.confirmed) throw new Error("Confirma Aranceles antes de entregar a Costeo.");
+	const confirmedSources = data.review.confirmed.sources || {};
+	const resultDocumentId = confirmedSources.result?.documentId;
+	if ((data.review.computedResult || data.review.externalResult) && !resultDocumentId) throw new Error("Confirma el resultado vigente antes de entregar a Costeo.");
+	for (const [kind, confirmed] of Object.entries(confirmedSources)) {
+		if (!confirmed?.documentId) continue;
+		const current = kind === "result" ? [data.review.computedResult, data.review.externalResult].find((source) => source?.documentId === confirmed.documentId) : kind === "external" ? data.review.externalResult : kind === "boletin" ? data.review.boletin : data.review.sources[kind];
+		const documentVersion = state.documents.find((document) => document.id === confirmed.documentId)?.versions.at(-1)?.version;
+		if (!current || current.documentId !== confirmed.documentId || current.version !== confirmed.version || documentVersion !== confirmed.version) throw new Error("La revisión corresponde a fuentes anteriores. Confirma las versiones vigentes antes de entregar.");
+	}
+	const requiredIds = [...new Set([
+		...p.requiredDocumentIds || [],
+		...SOURCE_KINDS.map((kind) => data.review.sources[kind]?.documentId),
+		...Object.values(confirmedSources).map((source) => source?.documentId).filter(Boolean)
+	])];
+	if (!p.invoiceDocumentId) throw new Error("Selecciona la factura del alcance de entrega.");
+	requiredIds.push(p.invoiceDocumentId);
+	if (requiredIds.some((id) => !id || !hasDocument(state, id) || !state.documents.find((document) => document.id === id)?.expedienteIds?.includes(exp.id))) throw new Error("Completa los documentos requeridos del alcance antes de entregar.");
+	return {
+		invoiceId: required$2(p.invoiceId || importInvoice(exp)?.id || (legacy ? "FAC-002" : ""), "Selecciona la factura del alcance de entrega"),
+		requiredIds
+	};
+}
 function requiredOi(data) {
 	if (!data.oiNumber) throw new Error("Registra el número de OI antes de iniciar esta gestión.");
 	if (data.returned) throw new Error("El expediente espera una corrección de Compras.");
@@ -45814,8 +45846,16 @@ function reduceImportaciones(state, action) {
 				const linked = serviceInvoiceExpedientes(state.expedientes, exp.company, supplier, number).filter((id) => expedienteIds.includes(id));
 				if (linked.length) throw duplicateServiceError("La factura de servicio", number, linked);
 			}
-			const serviceId = scopedInsurance ? insurancePolicyServiceId(insuranceSource.id) : p.serviceId || (scopedInvoice ? serviceInvoiceId(exp.id, supplier, number) : `${p.noAdditionalPayment ? "support" : "service"}-${closedService ? group.id : serviceIdentityKey(exp.company)}-${serviceIdentityKey(supplier)}-${serviceIdentityKey(number)}`);
-			const duplicates = state.expedientes.filter((item) => item.importaciones?.services?.some((service) => service.id === serviceId || !scopedInsurance && closedService && group.expedienteIds.includes(item.id) && service.supplier === supplier && service.number === number));
+			const baseId = scopedInsurance ? insurancePolicyServiceId(insuranceSource.id) : p.serviceId || (scopedInvoice ? serviceInvoiceId(exp.id, supplier, number) : `${p.noAdditionalPayment ? "support" : "service"}-${closedService ? group.id : serviceIdentityKey(exp.company)}-${serviceIdentityKey(supplier)}-${serviceIdentityKey(number)}`);
+			const existingServices = state.expedientes.flatMap((item) => item.importaciones?.services || []);
+			const idOwners = existingServices.filter((service) => service.id === baseId);
+			let serviceId = baseId;
+			if (!scopedInsurance && idOwners.length && idOwners.every((service) => serviceIdentityKey(service.supplier) !== serviceIdentityKey(supplier) || serviceIdentityKey(service.number) !== serviceIdentityKey(number))) {
+				const occupied = new Set(existingServices.map((service) => service.id));
+				let suffix = 2;
+				while (occupied.has(serviceId) || state.documents.some((doc) => doc.id === serviceId + "-document")) serviceId = baseId + "-" + suffix++;
+			}
+			const duplicates = state.expedientes.filter((item) => item.importaciones?.services?.some((service) => service.id === serviceId || !scopedInsurance && (closedService ? group.expedienteIds : expedienteIds).includes(item.id) && Boolean(service.noAdditionalPayment) === Boolean(p.noAdditionalPayment) && serviceIdentityKey(service.supplier) === serviceIdentityKey(supplier) && serviceIdentityKey(service.number) === serviceIdentityKey(number)));
 			if (duplicates.length) throw duplicateServiceError(insurancePolicy ? "La póliza" : p.noAdditionalPayment ? "El documento" : "La factura de servicio", number, duplicates.map((item) => item.id));
 			saveServiceShipment(expedienteIds);
 			const doc = reuseInsurance ? { documentId: insuranceSource.id } : addDocument({
@@ -46035,9 +46075,26 @@ function reduceImportaciones(state, action) {
 			const original = data.services.find((service) => service.id === p.serviceId);
 			if (!original) throw new Error("La factura de servicio no está disponible.");
 			const payment = next.payments.find((item) => item.id === original.paymentId);
-			if (p.noAdditionalPayment && (original.paymentId || next.payments.some((item) => item.applications?.some((row) => row.obligationId === original.id)))) throw new Error("La factura ya tiene seguimiento de pago. Se conserva su gestión; no puede convertirse en boletín.");
+			const hasPaymentRequest = serviceHasPaymentRequest(next, original);
+			if (p.noAdditionalPayment && hasPaymentRequest) throw new Error("La factura ya tiene seguimiento de pago. Se conserva su gestión; no puede convertirse en boletín.");
 			if (original.paymentId && (!payment || payment.getpay?.status !== "sin_id" || payment.jde?.status !== "pendiente" || payment.applications.some((item) => item.paid > 0 || item.cancelled > 0) || payment.disbursements?.length)) throw new Error("La factura tiene una gestión financiera avanzada. Consulta el seguimiento antes de modificarla.");
-			if (p.number !== original.number || p.supplier !== original.supplier || currencyCode(p.currency) !== original.currency) throw new Error("Proveedor, número y moneda identifican la factura existente y se conservan al editar.");
+			const supplier = required$2(p.supplier, "Proveedor"), number = required$2(p.number, "Número de factura");
+			const currency = currencyCode(required$2(p.currency, "Moneda"));
+			const currencyChanged = currency !== currencyCode(original.currency);
+			const identityChanged = supplier !== original.supplier || number !== original.number || currencyChanged;
+			if (hasPaymentRequest && identityChanged) throw new Error("La factura ya tiene seguimiento de pago. Conserva proveedor, número y moneda.");
+			if (supplier !== original.supplier && p.supplierId && !supplierDirectory(state).some((row) => row.type === "service" && row.enabled && row.record.id === p.supplierId && row.record.label === supplier)) throw new Error("Vuelve a seleccionar el proveedor de servicios.");
+			if (currencyChanged && !acceptsRecordedCurrency(state, currency)) throw new Error("Selecciona una moneda de servicio activa del catálogo.");
+			const foreignCurrency = !["NIO", "USD"].includes(currency);
+			const newRate = currencyChanged ? foreignCurrency ? exchangeRateToNio(state, currency) : null : original.sourceExchangeRate;
+			if (currencyChanged && foreignCurrency && currencyRateValue(currency, newRate) == null) throw new Error("Configura el tipo de cambio " + currency + " → NIO en Administración antes de guardar la factura.");
+			const identity = identityChanged ? {
+				supplier,
+				number,
+				currency
+			} : {};
+			const supplierUpdate = supplier === original.supplier ? {} : { supplierId: p.supplierId || null };
+			const exchange = currencyChanged ? { sourceExchangeRate: newRate } : {};
 			const amount = positive(p.total, "Total"), date = validDate$1(p.date, "Fecha de factura");
 			const concepts = serviceConceptRows(p, state, action);
 			if (original.insurancePolicy && (p.serviceType !== "Seguro" || concepts.some((concept) => concept.reportRow !== 33 || concept.costable === false))) throw Error("Clasifica la prima como Seguro de internación para que llegue a Costeo.");
@@ -46056,7 +46113,11 @@ function reduceImportaciones(state, action) {
 			if (!concepts.length || (totals ? expected !== money(amount) || money(p.iva) !== money(totals.iva) || money(p.taxable) !== money(totals.taxable) || money(p.untaxed) !== money(totals.untaxed) : concepts.reduce((sum, item) => sum + money(item.amount), 0) !== expected)) throw new Error("Los conceptos deben sumar la base de la factura. Revisa la base gravada e IVA del 15%.");
 			const expedienteIds = closedService && original.agencyShipmentId === group.id ? group.expedienteIds : [...new Set([exp.id, ...p.expedienteIds || []])];
 			if (closedService && (expedienteIds.length !== original.expedienteIds.length || expedienteIds.some((id) => !original.expedienteIds.includes(id)))) throw Error("Conserva los expedientes de la factura registrada.");
-			if (expedienteIds.some((id) => !state.expedientes.some((item) => item.id === id && serviceExpedienteSelectable(item, closedService ? item.company : exp.company)))) throw new Error("Selecciona expedientes todavía no costeados para este servicio.");
+			if (expedienteIds.some((id) => !original.expedienteIds.includes(id) && !state.expedientes.some((item) => item.id === id && serviceExpedienteSelectable(item, exp.company)))) throw new Error("Selecciona expedientes todavía no costeados para este servicio.");
+			if (identityChanged || Boolean(p.noAdditionalPayment) !== Boolean(original.noAdditionalPayment) || expedienteIds.some((id) => !original.expedienteIds.includes(id))) {
+				const linked = state.expedientes.filter((item) => expedienteIds.includes(item.id) && item.importaciones?.services?.some((service) => service.id !== original.id && Boolean(service.noAdditionalPayment) === Boolean(p.noAdditionalPayment) && serviceIdentityKey(service.supplier) === serviceIdentityKey(supplier) && serviceIdentityKey(service.number) === serviceIdentityKey(number)));
+				if (linked.length) throw duplicateServiceError(p.noAdditionalPayment ? "El documento" : "La factura de servicio", number, linked.map((item) => item.id));
+			}
 			const previousVersion = next.documents.find((doc) => doc.id === original.documentId)?.versions.at(-1);
 			const file = p.keepPrincipal === true || !Object.hasOwn(p, "file") ? {
 				name: previousVersion?.fileName,
@@ -46068,14 +46129,14 @@ function reduceImportaciones(state, action) {
 				id: original.documentId,
 				expedienteIds,
 				type: "Factura de servicio",
-				title: original.number,
+				title: number,
 				file,
 				metadata: {
-					number: original.number,
-					supplier: original.supplier,
+					number,
+					supplier,
 					date,
-					currency: original.currency,
-					...original.sourceExchangeRate ? { sourceExchangeRate: original.sourceExchangeRate } : {},
+					currency: currencyChanged ? currency : original.currency,
+					...newRate ? { sourceExchangeRate: newRate } : {},
 					total: amount,
 					concepts,
 					...taxDetails,
@@ -46091,6 +46152,7 @@ function reduceImportaciones(state, action) {
 				} : doc),
 				obligations: next.obligations.map((item) => item.id === original.id ? {
 					...item,
+					...identity,
 					total: amount,
 					totalCents: money(amount),
 					concepts,
@@ -46120,13 +46182,13 @@ function reduceImportaciones(state, action) {
 				obligations: [...next.obligations, {
 					id: original.id,
 					company: original.company,
-					supplier: original.supplier,
-					number: original.number,
+					supplier,
+					number,
 					total: amount,
 					totalCents: money(amount),
 					openingPaid: 0,
 					openingPaidCents: 0,
-					currency: original.currency,
+					currency: currencyChanged ? currency : original.currency,
 					expedienteIds,
 					documentId: original.documentId,
 					concepts
@@ -46136,15 +46198,21 @@ function reduceImportaciones(state, action) {
 				...next,
 				documents: next.documents.map((doc) => doc.id === original.documentId ? {
 					...doc,
+					...identityChanged && !original.insurancePolicy ? { title: number } : {},
 					type: p.noAdditionalPayment ? "Boletín" : "Factura de servicio",
 					metadata: {
 						...doc.metadata,
+						...identity,
+						...exchange,
 						noAdditionalPayment: Boolean(p.noAdditionalPayment)
 					}
 				} : doc)
 			};
 			const service = {
 				...original,
+				...identity,
+				...supplierUpdate,
+				...exchange,
 				noAdditionalPayment: Boolean(p.noAdditionalPayment),
 				vatExempt: Boolean(p.vatExempt),
 				...taxDetails,
@@ -46383,26 +46451,9 @@ function reduceImportaciones(state, action) {
 			break;
 		}
 		case "IMPORT_DELIVER_COSTEO": {
-			if (data.review.status !== "confirmado" || !data.review.confirmed) throw new Error("Confirma Aranceles antes de entregar a Costeo.");
-			const confirmedSources = data.review.confirmed.sources || {};
-			const resultDocumentId = confirmedSources.result?.documentId;
-			if ((data.review.computedResult || data.review.externalResult) && !resultDocumentId) throw new Error("Confirma el resultado vigente antes de entregar a Costeo.");
-			for (const [kind, confirmed] of Object.entries(confirmedSources)) {
-				if (!confirmed?.documentId) continue;
-				const current = kind === "result" ? [data.review.computedResult, data.review.externalResult].find((source) => source?.documentId === confirmed.documentId) : kind === "external" ? data.review.externalResult : kind === "boletin" ? data.review.boletin : data.review.sources[kind];
-				const documentVersion = next.documents.find((document) => document.id === confirmed.documentId)?.versions.at(-1)?.version;
-				if (!current || current.documentId !== confirmed.documentId || current.version !== confirmed.version || documentVersion !== confirmed.version) throw new Error("La revisión corresponde a fuentes anteriores. Confirma las versiones vigentes antes de entregar.");
-			}
-			const requiredIds = [...new Set([
-				...p.requiredDocumentIds || [],
-				...SOURCE_KINDS.map((kind) => data.review.sources[kind]?.documentId),
-				...Object.values(confirmedSources).map((source) => source?.documentId).filter(Boolean)
-			])];
-			if (!p.invoiceDocumentId) throw new Error("Selecciona la factura del alcance de entrega.");
-			requiredIds.push(p.invoiceDocumentId);
-			if (requiredIds.some((id) => !id || !hasDocument(next, id) || !next.documents.find((document) => document.id === id)?.expedienteIds?.includes(exp.id))) throw new Error("Completa los documentos requeridos del alcance antes de entregar.");
+			const { invoiceId, requiredIds } = costeoDeliveryDocuments(next, exp, p, action[REPLAY_LEGACY_COSTEO_SOURCES]);
 			const delivery = {
-				invoiceId: required$2(p.invoiceId || importInvoice(exp)?.id || (action[REPLAY_LEGACY_COSTEO_SOURCES] ? "FAC-002" : ""), "Selecciona la factura del alcance de entrega"),
+				invoiceId,
 				documentIds: [...new Set(requiredIds)],
 				sources: structuredClone(data.review.confirmed.sources),
 				totalFob: data.review.comparisons.reduce((sum, row) => sum + money(row.fob), 0) / 100,
@@ -114161,7 +114212,7 @@ var importedTaxIds = new Set([
 ]);
 var isImportedTax = (charge) => importedTaxIds.has(charge.id) || /^(DAI|ISC|Otros ISC)$/i.test(charge.concept || "");
 var sourceTaxAmount = (value) => value && typeof value === "object" ? value.amount : value;
-function fiscalVatSnapshot(exp, legacyVat) {
+function fiscalVatSnapshot(exp, { legacyVat, includeDifference }) {
 	const review = exp.importaciones?.review || {}, evidence = [];
 	for (const kind of ["preliquidacion", "boletin"]) {
 		const source = kind === "boletin" ? review.boletin : review.sources?.[kind];
@@ -114187,21 +114238,34 @@ function fiscalVatSnapshot(exp, legacyVat) {
 	}
 	const definitive = legacyVat ? [] : evidence.filter((row) => row.kind === "boletin" || row.kind === "boletin-partidas");
 	const selected = definitive.length ? definitive : evidence;
-	requireCondition(new Set(selected.map((row) => toCents(row.amount))).size <= 1, "El IVA individual de Preliquidación y Boletín no coincide; corrige las fuentes antes de entregar a Costeo.");
+	const difference = new Set(evidence.map((row) => toCents(row.amount))).size > 1;
+	if (legacyVat) requireCondition(new Set(selected.map((row) => toCents(row.amount))).size <= 1, "El IVA individual de Preliquidación y Boletín no coincide; corrige las fuentes antes de entregar a Costeo.");
 	const preliq = review.sources?.preliquidacion;
 	const required = preliq?.sourceFormat === "preliq-pos" || preliq?.sourceMetadata?.vatScope === "consolidated";
 	return {
 		amount: selected[0]?.amount ?? null,
 		evidence: selected,
+		...includeDifference && difference ? { difference: true } : {},
 		status: selected.length ? "individual_verified" : required ? "pending_individual_source" : "not_available",
 		scope: "individual_oi",
 		...AIRTABLE_COSTEO_META
 	};
 }
-function externalTaxSnapshot(exp, at, legacyVat) {
+function costeoTaxResult(exp) {
 	const review = exp.importaciones?.review || {};
-	const source = review.mode === "external" ? review.evaluatedResult || review.externalResult : review.computedResult || review.externalResult;
-	if (!source?.rows?.length) return null;
+	return review.mode === "external" ? review.evaluatedResult || review.externalResult : review.computedResult || review.externalResult;
+}
+function costeoDeliveryFiscal(state, exp, options = {}) {
+	const result = costeoTaxResult(exp);
+	if (!result?.rows?.length) return null;
+	const fiscal = fiscalVatSnapshot(exp, options);
+	const validVersion = ({ documentId, version }, needsFile = false) => state.documents.some((doc) => doc.id === documentId && doc.versions.some((entry) => entry.version === version && (!needsFile || entry.blob?.size)));
+	requireCondition(validVersion(result), "El resultado arancelario entregado no existe como documento versionado.");
+	requireCondition(fiscal.evidence.every((row) => validVersion(row, true)), "El IVA fiscal debe conservar su documento individual y la versión entregada.");
+	return fiscal;
+}
+function externalTaxSnapshot(exp, at, fiscalVat) {
+	const review = exp.importaciones?.review || {}, source = costeoTaxResult(exp);
 	const totals = source.rows.reduce((sum, row) => ({
 		dai: sum.dai + toCents(amount(row.daiAmount ?? row.dai ?? 0, "DAI externo")),
 		isc: sum.isc + toCents(amount(row.iscAmount ?? row.isc ?? 0, "ISC externo")),
@@ -114218,7 +114282,7 @@ function externalTaxSnapshot(exp, at, legacyVat) {
 		workbook: source.workbook || "",
 		oiNumber: oiFor(exp),
 		importedAt: at,
-		fiscalVat: fiscalVatSnapshot(exp, legacyVat),
+		fiscalVat,
 		totals: review.costeoTaxAmounts || Object.fromEntries(Object.entries(totals).map(([key, value]) => [key, fromCents(value)])),
 		rows: clone$1(source.rows)
 	};
@@ -114290,10 +114354,9 @@ function syncCosteoImportPackage(previous, next, action) {
 	const id = action.payload?.expedienteId;
 	const sourceExp = next.expedientes.find((exp) => exp.id === id);
 	if (!sourceExp) return next;
-	const snapshot = externalTaxSnapshot(sourceExp, action.at, legacyVat);
-	if (!snapshot) return next;
-	requireCondition(next.documents.some((document) => document.id === snapshot.documentId && document.versions.some((version) => version.version === snapshot.version)), "El resultado arancelario entregado no existe como documento versionado.");
-	requireCondition(snapshot.fiscalVat.evidence.every((evidence) => next.documents.some((document) => document.id === evidence.documentId && document.versions.some((version) => version.version === evidence.version && version.blob?.size))), "El IVA fiscal debe conservar su documento individual y la versión entregada.");
+	const fiscalVat = costeoDeliveryFiscal(next, sourceExp, { legacyVat });
+	if (!fiscalVat) return next;
+	const snapshot = externalTaxSnapshot(sourceExp, action.at, fiscalVat);
 	const state = initializeCosteoFollowup(next, legacyVat, legacySources), exp = expFor(state, id), followup = exp.costeo.followup;
 	const previousSnapshot = previous.expedientes.find((row) => row.id === id)?.costeo?.followup?.importedTaxSnapshot;
 	if (previousSnapshot?.documentId === snapshot.documentId && previousSnapshot.version === snapshot.version && JSON.stringify(previousSnapshot.fiscalVat) === JSON.stringify(snapshot.fiscalVat)) return state;
@@ -117480,7 +117543,7 @@ function restoreJournalUI(initial, state, { pendingReplay = false } = {}) {
 }
 //#endregion
 //#region src/adapters/web/startupRead.js
-var webCheckpointContract = "cf0d10dea62a60433e271f1af67bee4e22a799623362653ba2acc1224459c1cf";
+var webCheckpointContract = "cad1db9617602be5662831ce5bf67be286168df60018b5e35850e1c3fc436504";
 var startupRequest;
 function stateReadPath(simple, contract) {
 	const params = new URLSearchParams();
@@ -119391,7 +119454,7 @@ var checkpointAssetBase = "/demo-app-importaciones-cp/";
 var checkpointProcessorContract = webCheckpointContract;
 async function buildStartupCheckpoint(state, readPublishedAsset) {
 	const prior = state.checkpoint;
-	if (!Number.isSafeInteger(state.revision) || state.revision < 1 || !Array.isArray(state.actions) || prior && prior.contract !== "cf0d10dea62a60433e271f1af67bee4e22a799623362653ba2acc1224459c1cf" || (prior?.revision || 0) + state.actions.length !== state.revision) throw Error("No se puede consolidar una revisión incompleta.");
+	if (!Number.isSafeInteger(state.revision) || state.revision < 1 || !Array.isArray(state.actions) || prior && prior.contract !== "cad1db9617602be5662831ce5bf67be286168df60018b5e35850e1c3fc436504" || (prior?.revision || 0) + state.actions.length !== state.revision) throw Error("No se puede consolidar una revisión incompleta.");
 	const [initial, journal] = await Promise.all([prepareStartupSession({
 		designVersion: "v18",
 		deferArticleMaster: true,
