@@ -2,7 +2,7 @@ name: ATLAS estado de arranque
 
 on:
   schedule:
-    - cron: '2-57/5 * * * *'
+    - cron: '3,8,13,18,23,28,33,38,43,48,53,58 * * * *'
   workflow_dispatch:
   push:
     branches: [main]
@@ -33,4 +33,6 @@ jobs:
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: '22'
+          cache: npm
+          cache-dependency-path: demo-app-importaciones-cp/atlas-checkpoint/package-lock.json
       - run: node --max-old-space-size=5120 .github/atlas/refresh-startup.mjs
