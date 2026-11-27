@@ -2496,7 +2496,7 @@ function configuredProjectionConcepts(config) {
 	}));
 }
 //#endregion
-//#region node_modules/pdf-lib/dist/pdf-lib.esm.js
+//#region ../../../../04_DEMO/02_app/node_modules/pdf-lib/dist/pdf-lib.esm.js
 /*! *****************************************************************************
 Copyright (c) Microsoft Corporation. All rights reserved.
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use
@@ -113774,6 +113774,8 @@ function reduceCompras(state, action) {
 //#region src/modules/costeo/vatBulletins.js
 var BULLETIN_VAT_POLICY = "DEC-328";
 var REPLAY_PREVIOUS_VAT = Symbol("replayPreviousVat");
+var BULLETIN_DAI_POLICY = "DEC-391";
+var REPLAY_PREVIOUS_DAI = Symbol("replayPreviousDai");
 var declarationKey = (value) => String(value ?? "").toUpperCase().replace(/[^A-Z0-9]/g, "");
 var fiscalService = (service) => service.noAdditionalPayment && !service.insurancePolicy && service.type !== "Seguro";
 var timestamp$1 = (value) => Date.parse(value) || 0;
@@ -113787,12 +113789,13 @@ function valueVatSources(sources, rate) {
 		};
 	});
 }
-function registeredBulletinVat(state, expediente) {
+function registeredBulletinTax(state, expediente, tax) {
 	const group = state.costingGroups?.find((item) => item.expedienteIds.includes(expediente.id));
 	const members = group ? state.expedientes.filter((item) => group.expedienteIds.includes(item.id)) : [expediente];
 	const active = /* @__PURE__ */ new Map();
 	for (const member of members) for (const service of member.importaciones?.services || []) {
 		if (!fiscalService(service)) continue;
+		if (tax === "dai" && !(Number(service.dai) > 0) && !["Impuestos", "Boletín de impuestos"].includes(service.type)) continue;
 		const liquidation = declarationKey(service.declaration) || declarationKey(service.number);
 		const index = state.documents.findIndex((item) => item.id === service.documentId);
 		const document = state.documents[index];
@@ -113820,8 +113823,8 @@ function registeredBulletinVat(state, expediente) {
 		hasAssociation = true;
 		const owners = ids.length === 1 ? ids : state.expedientes.filter((item) => ids.includes(item.id) && declarationKey(item.importaciones?.nationalization?.declaration) === liquidation).map((item) => item.id);
 		if (owners.length === 1 && owners[0] !== expediente.id) continue;
-		const currency = currencyCode(service.currency), amount = Number(service.iva);
-		if (owners.length !== 1 || !version || !/\.pdf$/i.test(version.fileName || "") || service.iva == null || !Number.isFinite(amount) || amount < 0 || !["USD", "NIO"].includes(currency) && currencyRateValue(currency, service.sourceExchangeRate) == null) {
+		const currency = currencyCode(service.currency), amount = Number(service[tax]);
+		if (owners.length !== 1 || !version || !/\.pdf$/i.test(version.fileName || "") || service[tax] == null || !Number.isFinite(amount) || amount < 0 || !["USD", "NIO"].includes(currency) && currencyRateValue(currency, service.sourceExchangeRate) == null) {
 			pending = true;
 			continue;
 		}
@@ -113841,6 +113844,8 @@ function registeredBulletinVat(state, expediente) {
 		hasAssociation
 	};
 }
+var registeredBulletinVat = (state, expediente) => registeredBulletinTax(state, expediente, "iva");
+var registeredBulletinDai = (state, expediente) => registeredBulletinTax(state, expediente, "dai");
 //#endregion
 //#region src/modules/costeo/reportData.js
 function reportHeader(exp, group = null, details = {}, actor = "", members = [], { invoiceTerms: includeInvoiceTerms = true } = {}) {
@@ -114457,7 +114462,49 @@ function purchaseCharges(exp) {
 		}];
 	});
 }
-function serviceDraft(state, exp, draft, legacyVat = false) {
+function bulletinDaiCharge(state, row, expedienteId) {
+	if (!row.importedTax || row.id.split(":").at(-1) !== "dai" || !expedienteId || row.taxSourceExpedienteId && row.taxSourceExpedienteId !== expedienteId) return row;
+	const { sources, pending } = registeredBulletinDai(state, expFor(state, expedienteId));
+	const { daiBeforeBulletin } = row;
+	if (pending || !sources.length) {
+		if (!daiBeforeBulletin) return row;
+		const restored = {
+			...row,
+			...daiBeforeBulletin
+		};
+		delete restored.bulletinDaiSources;
+		delete restored.daiBeforeBulletin;
+		return restored;
+	}
+	const [first] = sources;
+	const original = daiBeforeBulletin || {
+		amount: row.amount,
+		currency: row.currency,
+		sourceAmount: row.sourceAmount,
+		sourceExchangeRate: row.sourceExchangeRate,
+		documentId: row.documentId,
+		sourceVersion: row.sourceVersion,
+		source: row.source,
+		sourceReference: row.sourceReference
+	};
+	const single = sources.length === 1;
+	const total = single ? first.amount : fromCents(valueVatSources(sources, configRate(state)).reduce((sum, source) => sum + toCents(source.usd), 0));
+	const reference = sources.map((source) => source.reference).join(" · ");
+	return {
+		...row,
+		amount: total,
+		sourceAmount: total,
+		currency: single ? first.currency : "USD",
+		sourceExchangeRate: single ? first.sourceExchangeRate : void 0,
+		documentId: first.documentId,
+		sourceVersion: first.sourceVersion,
+		source: "Boletín de Servicios",
+		sourceReference: reference,
+		bulletinDaiSources: sources,
+		daiBeforeBulletin: original
+	};
+}
+function serviceDraft(state, exp, draft, legacyVat = false, legacyDai = false) {
 	if (configuredRate(state) == null) return draft;
 	draft = {
 		...draft,
@@ -114517,7 +114564,7 @@ function serviceDraft(state, exp, draft, legacyVat = false) {
 	const charges = normalizeCharges([...preserved, ...services], state);
 	if (!legacyVat) return {
 		...draft,
-		charges,
+		charges: legacyDai ? charges : charges.map((row) => bulletinDaiCharge(state, row, exp.id)),
 		...officialVatDraft(state, exp, draft, vat, rate)
 	};
 	let inheritedVat = draft.sourceBaseIva ?? (draft.sourceServiceIva == null ? draft.iva || 0 : amount(draft.iva || 0) - amount(draft.sourceServiceIva));
@@ -114573,13 +114620,13 @@ function serviceDraft(state, exp, draft, legacyVat = false) {
 		vatSources: [...fiscalSources, ...vat.sources]
 	};
 }
-function groupSourceCharges(state, ids, legacyVat) {
+function groupSourceCharges(state, ids, legacyVat, legacyDai) {
 	const rows = ids.flatMap((id) => {
 		const exp = expFor(state, id), followup = exp.costeo.followup;
 		return serviceDraft(state, exp, followup.draft || current(followup) || {
 			charges: [],
 			iva: 0
-		}, legacyVat).charges.map((row) => ({
+		}, legacyVat, legacyDai).charges.map((row) => ({
 			...row,
 			id: `${id}:${row.id}`,
 			originExpedienteId: id
@@ -114642,20 +114689,21 @@ function groupVatDraft(state, group, legacyVat = false) {
 		sourceIvaExchangeRate: rate
 	};
 }
-function refreshDraftSources(state, legacyVat = false) {
+function refreshDraftSources(state, legacyVat = false, legacyDai = false) {
 	for (const group of state.costingGroups || []) if (group.draft && !group.versions.length && (group.fromImportaciones || group.shipmentMembershipPending)) group.draft.fob = fromCents(group.expedienteIds.reduce((sum, id) => sum + toCents(sourceFob(expFor(state, id))), 0));
 	if (configuredRate(state) == null) return;
-	for (const exp of state.expedientes) if (exp.costeo.followup.draft && !exp.costeo.followup.draft.exchangeRateCorrection) exp.costeo.followup.draft = serviceDraft(state, exp, exp.costeo.followup.draft, legacyVat);
+	for (const exp of state.expedientes) if (exp.costeo.followup.draft && !exp.costeo.followup.draft.exchangeRateCorrection) exp.costeo.followup.draft = serviceDraft(state, exp, exp.costeo.followup.draft, legacyVat, legacyDai);
 	for (const group of state.costingGroups || []) if (group.draft && !group.draft.exchangeRateCorrection) {
 		if (group.shipmentMembershipPending) {
-			const source = groupSourceCharges(state, group.expedienteIds, legacyVat), keys = new Set(source.map((row) => row.id));
+			const source = groupSourceCharges(state, group.expedienteIds, legacyVat, legacyDai), keys = new Set(source.map((row) => row.id));
 			group.draft.charges = source.concat(group.draft.charges.filter((row) => !row.sourceLocked && !row.serviceSource && !row.importedTax && !keys.has(row.id)));
 			group.draft.fob = fromCents(group.expedienteIds.reduce((sum, id) => sum + toCents(sourceFob(expFor(state, id))), 0));
 			delete group.shipmentMembershipPending;
 		}
-		const sourceRows = groupSourceCharges(state, group.expedienteIds, legacyVat);
+		const sourceRows = groupSourceCharges(state, group.expedienteIds, legacyVat, legacyDai);
 		const old = group.draft.charges.filter((row) => !row.serviceSource && !row.purchaseSource);
-		group.draft.charges = old.concat(sourceRows.filter((row) => row.serviceSource || row.purchaseSource));
+		const inherited = legacyDai ? old : old.map((row) => bulletinDaiCharge(state, row, row.taxSourceExpedienteId));
+		group.draft.charges = inherited.concat(sourceRows.filter((row) => row.serviceSource || row.purchaseSource));
 		Object.assign(group.draft, groupVatDraft(state, group, legacyVat));
 		group.allocations = defaultAllocations(state, group, group.draft).map((row) => group.allocations?.find((prior) => prior.chargeId === row.chargeId && !group.draft.charges.find((charge) => charge.id === row.chargeId).serviceSource && prior.total === row.total && prior.currency === row.currency) || row);
 	}
@@ -114700,7 +114748,7 @@ function newFollowup(exp, state) {
 		releasedAt: null
 	};
 }
-function initializeCosteoFollowup(source, legacyVat = true, legacySources = false) {
+function initializeCosteoFollowup(source, legacyVat = true, legacySources = false, legacyDai = false) {
 	const { articleMaster, ...operationalState } = legacySources ? source : costeoStateFromSources(source);
 	const state = clone$1(operationalState);
 	if (Object.hasOwn(source, "articleMaster")) state.articleMaster = articleMaster;
@@ -114776,7 +114824,7 @@ function initializeCosteoFollowup(source, legacyVat = true, legacySources = fals
 		exp.costeo ||= {};
 		exp.costeo.followup ||= newFollowup(exp, state);
 	}
-	refreshDraftSources(state, legacyVat);
+	refreshDraftSources(state, legacyVat, legacyDai);
 	return state;
 }
 function getCosteoGroup(state, reference) {
@@ -114955,25 +115003,27 @@ function taxesFromSnapshot(snapshot, expedienteId) {
 function syncCosteoImportPackage(previous, next, action) {
 	if (next.ui?.designVersion !== "v18") return next;
 	const legacyVat = action[REPLAY_PREVIOUS_VAT] === true;
+	const legacyDai = action[REPLAY_PREVIOUS_DAI] === true;
 	const legacySources = action[REPLAY_LEGACY_COSTEO_SOURCES] === true;
 	if ([
 		"IMPORT_SAVE_GENERAL",
 		"IMPORT_ADD_SHIPMENT_MEMBER",
 		"IMPORT_EDIT_SHIPMENT_NUMBERS"
-	].includes(action.type) && next.costingGroups?.some((group) => group.fromImportaciones || group.shipmentMembershipPending)) return initializeCosteoFollowup(next, legacyVat, legacySources);
+	].includes(action.type) && next.costingGroups?.some((group) => group.fromImportaciones || group.shipmentMembershipPending)) return initializeCosteoFollowup(next, legacyVat, legacySources, legacyDai);
 	const purchaseUpdate = action.type === "COMPRA_UPDATE_INVOICE" && action.payload?.chargesOnly;
 	if (purchaseUpdate || [
 		"IMPORT_SAVE_SERVICE",
 		"IMPORT_UPDATE_SERVICE",
 		"IMPORT18_LINK_REIMBURSEMENT"
 	].includes(action.type)) {
-		const refreshed = initializeCosteoFollowup(next, legacyVat, legacySources);
+		const refreshed = initializeCosteoFollowup(next, legacyVat, legacySources, legacyDai);
 		for (const exp of refreshed.expedientes) if (exp.costeo.followup.versions.length && !exp.costeo.followup.draft) {
 			const before = getCosteoDistributions(previous, exp.id), after = getCosteoDistributions(refreshed, exp.id);
 			const oldExp = previous.expedientes.find((item) => item.id === exp.id);
 			const changedVat = !legacyVat && oldExp && JSON.stringify(registeredBulletinVat(previous, oldExp)) !== JSON.stringify(registeredBulletinVat(refreshed, exp));
 			const changedPurchase = purchaseUpdate && !exp.costeo.followup.finalizedAt && oldExp && JSON.stringify(purchaseCharges(oldExp)) !== JSON.stringify(purchaseCharges(exp));
-			if (changedVat || changedPurchase || JSON.stringify(before) !== JSON.stringify(after)) {
+			const changedDai = !legacyDai && oldExp && JSON.stringify(registeredBulletinDai(previous, oldExp)) !== JSON.stringify(registeredBulletinDai(refreshed, exp));
+			if (changedVat || changedDai || changedPurchase || JSON.stringify(before) !== JSON.stringify(after)) {
 				exp.costeo.followup.pendingServiceSnapshot = {
 					at: action.at,
 					action: action.type,
@@ -114991,7 +115041,7 @@ function syncCosteoImportPackage(previous, next, action) {
 	const fiscalVat = costeoDeliveryFiscal(sourceExp, { legacyVat });
 	if (!fiscalVat) return next;
 	const snapshot = externalTaxSnapshot(sourceExp, action.at, fiscalVat);
-	const state = initializeCosteoFollowup(next, legacyVat, legacySources), exp = expFor(state, id), followup = exp.costeo.followup;
+	const state = initializeCosteoFollowup(next, legacyVat, legacySources, legacyDai), exp = expFor(state, id), followup = exp.costeo.followup;
 	const previousSnapshot = previous.expedientes.find((row) => row.id === id)?.costeo?.followup?.importedTaxSnapshot;
 	if (previousSnapshot?.documentId === snapshot.documentId && previousSnapshot.version === snapshot.version && JSON.stringify(previousSnapshot.fiscalVat) === JSON.stringify(snapshot.fiscalVat)) return state;
 	if (followup.versions.length) {
@@ -115027,7 +115077,7 @@ function syncCosteoImportPackage(previous, next, action) {
 		group.draft.fob = fromCents(group.expedienteIds.reduce((sum, expedienteId) => sum + toCents(sourceFob(expFor(state, expedienteId))), 0));
 		group.allocations = defaultAllocations(state, group, group.draft);
 	}
-	refreshDraftSources(state, legacyVat);
+	refreshDraftSources(state, legacyVat, legacyDai);
 	return state;
 }
 function financialSummary(draft, rate) {
@@ -115150,12 +115200,22 @@ function getH1(state, reference) {
 	const legacyResult = exp ? legacyResultFor(exp) : false;
 	const version = current(followup);
 	let data = followup.draft || version;
+	let allocations = group?.allocations || [];
 	if (followup.draft && !followup.draft.exchangeRateCorrection) {
 		if (exp) data = serviceDraft(state, exp, followup.draft, legacyResult);
-		else if (configuredRate(state) != null) data = {
-			...followup.draft,
-			...groupVatDraft(state, group)
-		};
+		else if (configuredRate(state) != null) {
+			const charges = data.charges.map((row) => bulletinDaiCharge(state, row, row.taxSourceExpedienteId));
+			const adjustments = new Set(charges.filter((row, index) => row.amount !== data.charges[index].amount || row.currency !== data.charges[index].currency).map((row) => row.id));
+			data = {
+				...data,
+				charges,
+				...groupVatDraft(state, group)
+			};
+			if (adjustments.size) {
+				const updated = defaultAllocations(state, group, { charges: charges.filter((row) => adjustments.has(row.id)) });
+				allocations = allocations.filter((row) => !adjustments.has(row.chargeId)).concat(updated);
+			}
+		}
 	}
 	const rate = Number(data?.exchangeRateCorrection?.value ?? costeoExchangeRate(state).value);
 	const pendingExchangeRate = Boolean(followup.draft) && !(Number.isFinite(rate) && rate > 0);
@@ -115187,7 +115247,7 @@ function getH1(state, reference) {
 		expedienteIds: group?.expedienteIds || [exp?.id],
 		oiNumber: exp ? oiFor(exp) : null,
 		distributions: exp ? getCosteoDistributions(state, exp.id) : [],
-		allocations: group?.allocations || [],
+		allocations,
 		memberFobs: group ? group.expedienteIds.map((id) => ({
 			expedienteId: id,
 			oiNumber: oiFor(expFor(state, id)),
@@ -115538,8 +115598,9 @@ function canStartJdeAttempt(previous, version) {
 function reduceCosteoFollowup(source, action) {
 	if (!action.type?.startsWith("COST18_") && !["ADMIN_COST18_CONFIG", "ADMIN_COST18_CORRECT_RATE"].includes(action.type)) return null;
 	const legacyVat = action[REPLAY_PREVIOUS_VAT] === true;
+	const legacyDai = action[REPLAY_PREVIOUS_DAI] === true;
 	const legacySources = action[REPLAY_LEGACY_COSTEO_SOURCES] === true;
-	const state = initializeCosteoFollowup(source, legacyVat, legacySources), p = action.payload || {}, at = action.at || (/* @__PURE__ */ new Date()).toISOString(), actor = action.actor || "Administrador";
+	const state = initializeCosteoFollowup(source, legacyVat, legacySources, legacyDai), p = action.payload || {}, at = action.at || (/* @__PURE__ */ new Date()).toISOString(), actor = action.actor || "Administrador";
 	const group = state.costingGroups?.find((item) => item.id === p.groupId);
 	requireCondition(![
 		...p.expedienteIds || [],
@@ -115660,7 +115721,7 @@ function reduceCosteoFollowup(source, action) {
 			requireCondition(exps.every((item) => oiFor(item) && sourceFob(item) > 0), "Cada expediente requiere OI y FOB positivo.");
 			requireCondition(new Set(exps.map(oiFor)).size === exps.length, "No repita una OI en el consolidado.");
 			const id = `COST-G-${String(state.costingGroups.length + 1).padStart(4, "0")}`;
-			const charges = groupSourceCharges(state, ids, legacyVat), deduplications = charges.filter((row) => row.serviceSource).map((row) => ({
+			const charges = groupSourceCharges(state, ids, legacyVat, legacyDai), deduplications = charges.filter((row) => row.serviceSource).map((row) => ({
 				obligationId: row.obligationId,
 				conceptId: row.conceptId,
 				total: row.amount,
@@ -115693,7 +115754,7 @@ function reduceCosteoFollowup(source, action) {
 			group.allocations = defaultAllocations(state, group, draft);
 			state.costingGroups.push(group);
 			for (const item of exps) item.costeo.groupId = id;
-			refreshDraftSources(state, legacyVat);
+			refreshDraftSources(state, legacyVat, legacyDai);
 			break;
 		}
 		case "COST18_REVIEW_REPORT": {
@@ -115852,7 +115913,7 @@ function reduceCosteoFollowup(source, action) {
 					at,
 					actor
 				});
-				refreshDraftSources(state, legacyVat);
+				refreshDraftSources(state, legacyVat, legacyDai);
 				break;
 			}
 			const group = getCosteoGroup(state, p.groupId);
@@ -115954,7 +116015,7 @@ function reduceCosteoFollowup(source, action) {
 				delete target.pendingTaxSnapshot;
 			}
 			owner.status = "draft";
-			refreshDraftSources(state, legacyVat);
+			refreshDraftSources(state, legacyVat, legacyDai);
 			break;
 		}
 		case "COST18_CALCULATE": {
@@ -116732,7 +116793,7 @@ function reduceCosteoFollowup(source, action) {
 						costDate: ""
 					};
 				}
-				refreshDraftSources(state, legacyVat);
+				refreshDraftSources(state, legacyVat, legacyDai);
 				if (group) group.allocations = defaultAllocations(state, group, target.draft).map((row) => group.allocations.find((old) => old.chargeId === row.chargeId && !target.draft.charges.find((charge) => charge.id === row.chargeId).importedTax && toCents(old.total) === toCents(row.total)) || row);
 				target.status = "draft";
 				followup.status = "correction_required";
@@ -118056,6 +118117,7 @@ var vatSourceActions = new Set([
 	"ADMIN_COST18_CORRECT_RATE"
 ]);
 var usesVatPolicy = (type) => type?.startsWith("COST18_") || vatSourceActions.has(type);
+var usesDaiPolicy = (action) => usesVatPolicy(action.type) || ["IMPORT_ADD_SHIPMENT_MEMBER", "IMPORT_EDIT_SHIPMENT_NUMBERS"].includes(action.type) || action.type === "COMPRA_UPDATE_INVOICE" && action.payload?.chargesOnly;
 var usesCosteoSourcePolicy = (type) => usesVatPolicy(type) || type === "IMPORT_REQUEST_SERVICE_PAYMENT" || /^(COST_|PAY_|ACCOUNT_)/.test(type || "");
 var uiFields = [
 	"activeOpeningDraftId",
@@ -118130,6 +118192,10 @@ async function prepareEntry(action, ui, storeAttachment, after) {
 		...currentAction,
 		costeoVatPolicy: BULLETIN_VAT_POLICY
 	};
+	if (usesDaiPolicy(action)) currentAction = {
+		...currentAction,
+		costeoBulletinDaiPolicy: BULLETIN_DAI_POLICY
+	};
 	if (usesCosteoSourcePolicy(action.type)) currentAction = {
 		...currentAction,
 		costeoSourcePolicy: COSTEO_SOURCE_POLICY
@@ -118185,6 +118251,7 @@ function applyJournalEntries(state, entries) {
 		if (closingPolicyActions.has(action.type) && !action.costeoClosingPolicy) action[REPLAY_PREVIOUS_CLOSING_POLICY] = true;
 		if (action.type === "COST18_FINALIZE" && action.costeoClosingPolicy !== "DEC-297") action[REPLAY_BEFORE_WAREHOUSE_CLOSE] = true;
 		if (usesVatPolicy(action.type) && action.costeoVatPolicy !== "DEC-328") action[REPLAY_PREVIOUS_VAT] = true;
+		if (usesDaiPolicy(action) && action.costeoBulletinDaiPolicy !== "DEC-391") action[REPLAY_PREVIOUS_DAI] = true;
 		if (usesCosteoSourcePolicy(action.type) && action.costeoSourcePolicy !== "DEC-330") action[REPLAY_LEGACY_COSTEO_SOURCES] = true;
 		if (action.type === "IMPORT_SAVE_SERVICE" && !action.insuranceServicePolicy) action[REPLAY_LEGACY_INSURANCE_SERVICE] = true;
 		if (action.type === "IMPORT_SAVE_SERVICE" && !action.serviceInvoiceScopePolicy) action[REPLAY_LEGACY_SERVICE_INVOICE] = true;
@@ -118213,7 +118280,7 @@ function restoreJournalUI(initial, state, { pendingReplay = false } = {}) {
 }
 //#endregion
 //#region src/adapters/web/startupRead.js
-var webCheckpointContract = "244090b8a704859f266d0c734cdd913e91f3c11c0d082c06ab110c75cf15398f";
+var webCheckpointContract = "a37adb9d5905bc4c2291da75d7728c39bee41b68afd9906ae47f1b001c413561";
 var startupRequest;
 function stateReadPath(simple, contract, after) {
 	const params = new URLSearchParams();
@@ -120160,7 +120227,7 @@ var checkpointAssetBase = "/demo-app-importaciones-cp/";
 var checkpointProcessorContract = webCheckpointContract;
 async function buildStartupCheckpoint(state, readPublishedAsset) {
 	const prior = state.checkpoint;
-	if (!Number.isSafeInteger(state.revision) || state.revision < 1 || !Array.isArray(state.actions) || prior && prior.contract !== "244090b8a704859f266d0c734cdd913e91f3c11c0d082c06ab110c75cf15398f" || (prior?.revision || 0) + state.actions.length !== state.revision) throw Error("No se puede consolidar una revisión incompleta.");
+	if (!Number.isSafeInteger(state.revision) || state.revision < 1 || !Array.isArray(state.actions) || prior && prior.contract !== "a37adb9d5905bc4c2291da75d7728c39bee41b68afd9906ae47f1b001c413561" || (prior?.revision || 0) + state.actions.length !== state.revision) throw Error("No se puede consolidar una revisión incompleta.");
 	const [initial, journal] = await Promise.all([prepareStartupSession({
 		designVersion: "v18",
 		deferArticleMaster: true,
