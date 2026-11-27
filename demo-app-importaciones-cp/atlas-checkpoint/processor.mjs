@@ -112257,6 +112257,26 @@ function selectedInvoiceLine(invoice, requested) {
 	if (matches.length !== 1) throw new Error("Selecciona la línea exacta de la factura; el artículo puede aparecer en distintas órdenes.");
 	return matches[0];
 }
+var invoiceDetailFields = [
+	"id",
+	"article",
+	"originalDescription",
+	"description",
+	"supplierOrder",
+	"order",
+	"orderType",
+	"orderLine",
+	"origin",
+	"box",
+	"invoiceUnit",
+	"quantity",
+	"unitCost",
+	"unitCostUSD",
+	"observations"
+];
+function sameInvoiceDetail(left, right) {
+	return left.length === right.length && left.every((row, index) => invoiceDetailFields.every((key) => String(row[key] ?? "") === String(right[index][key] ?? "")));
+}
 function versionedInvoice(invoice, lines, reason, action, extra = {}) {
 	const charges = extra.charges ?? invoice.charges ?? {}, total = invoiceFinancialTotal(lines, charges);
 	const previous = invoice.versions?.length ? invoice.versions : [{
@@ -112562,30 +112582,12 @@ function reduceCompras(state, action) {
 				if (header.currency && exp?.compras.currency !== header.currency) throw new Error("La moneda de cada factura debe coincidir con la del expediente.");
 				if (update && header.file?.documentId === existing.documentId && header.file.documentVersion === (existing.documentVersion || state.documents.find((doc) => doc.id === existing.documentId)?.versions.at(-1)?.version)) delete payload.file;
 				if (update && !payload.file) {
-					const fields = [
-						"id",
-						"article",
-						"originalDescription",
-						"description",
-						"supplierOrder",
-						"order",
-						"orderType",
-						"orderLine",
-						"origin",
-						"box",
-						"invoiceUnit",
-						"quantity",
-						"unitCost",
-						"unitCostUSD",
-						"observations"
-					];
-					const signature = (lines) => JSON.stringify(lines.map((line) => fields.map((key) => String(line[key] ?? ""))));
 					const sameCharges = [
 						"freight",
 						"insurance",
 						"otherExpenses"
 					].every((key) => String(existing.charges?.[key] ?? "") === String(header.charges?.[key] ?? ""));
-					if (signature(existing.lines) === signature(header.lines) && sameCharges && (existing.incoterm || "") === (header.incoterm || "") && (existing.date || existing.documentDate || "") === (header.documentDate || "")) continue;
+					if (sameInvoiceDetail(existing.lines, header.lines) && sameCharges && (existing.incoterm || "") === (header.incoterm || "") && (existing.date || existing.documentDate || "") === (header.documentDate || "")) continue;
 				}
 				next = reduceCompras(next, {
 					...batchAction,
@@ -113362,6 +113364,36 @@ function reduceCompras(state, action) {
 		};
 	}
 	if (action.type === "COMPRA_UPDATE_INVOICE") {
+		if (p.chargesOnly) {
+			const invoice = getInvoice(exp, p.invoiceId);
+			if (p.expectedVersion !== (invoice.versions?.at(-1)?.version || 1)) throw new Error("La factura cambió. Ábrela de nuevo antes de guardar los cargos.");
+			const charges = normalizeInvoiceCharges(p.charges);
+			const sameCharges = [
+				"freight",
+				"insurance",
+				"otherExpenses"
+			].every((key) => invoice.charges?.[key] === charges[key]);
+			if (sameCharges && invoice.costeoChargeSource) return state;
+			const reason = required(p.reason, "Observación del cambio");
+			const next = validateInvoiceFinancialEdit(state, exp, invoice, invoice.lines, p.currency, charges);
+			const updated = sameCharges ? {
+				...invoice,
+				costeoChargeSource: true
+			} : {
+				...versionedInvoice(invoice, invoice.lines, reason, action, {
+					charges,
+					costeoChargeSource: true
+				}),
+				lines: invoice.lines,
+				status: invoice.status,
+				sourceOnly: invoice.sourceOnly,
+				translationRequired: invoice.translationRequired
+			};
+			return record(next, exp, { compras: {
+				...data,
+				invoices: data.invoices.map((item) => item.id === invoice.id ? updated : item)
+			} }, action, `Cargos de ${invoice.number} actualizados: ${reason}`, invoice.documentId);
+		}
 		const invoice = getInvoice(exp, p.invoiceId), lines = validateLines(p.lines), reason = required(p.reason, "Observación del cambio");
 		validateLineDocumentContext(lines, {
 			number: invoice.number,
@@ -114382,12 +114414,57 @@ function officialVatDraft(state, exp, draft, invoiceVat, rate) {
 		vatSources
 	};
 }
+var purchaseChargeTypes = [
+	{
+		key: "freight",
+		concept: "Flete exterior",
+		udc: 21,
+		reportRow: 13,
+		costConceptId: "h1-flete-exterior"
+	},
+	{
+		key: "insurance",
+		concept: "Seguro exterior",
+		udc: 31,
+		reportRow: 14,
+		costConceptId: "h1-seguro-exterior"
+	},
+	{
+		key: "otherExpenses",
+		concept: "Otros gastos",
+		udc: 35,
+		reportRow: 15
+	}
+];
+function purchaseCharges(exp) {
+	const invoiceId = exp.costeo?.receivedPackage?.invoiceId;
+	const invoice = exp.compras?.invoices?.find((row) => row.id === invoiceId);
+	if (!invoice?.costeoChargeSource) return [];
+	return purchaseChargeTypes.flatMap(({ key, ...type }) => {
+		const value = invoice.charges?.[key];
+		if (!(value > 0)) return [];
+		return [{
+			...type,
+			id: `compra:${invoice.id}:${key}`,
+			amount: value,
+			currency: invoice.currency || exp.compras.currency || "USD",
+			block: "external",
+			documentId: invoice.documentId,
+			sourceVersion: invoice.documentVersion,
+			source: `Factura comercial ${invoice.number}`,
+			purchaseSource: true,
+			sourceLocked: true
+		}];
+	});
+}
 function serviceDraft(state, exp, draft, legacyVat = false) {
 	if (configuredRate(state) == null) return draft;
 	draft = {
 		...draft,
 		charges: (draft.charges || []).map((row) => classifiedCharge(state, row))
 	};
+	const commercial = purchaseCharges(exp);
+	if (commercial.length || draft.charges.some((row) => row.purchaseSource)) draft.charges = normalizeCharges(draft.charges.filter((row) => !row.purchaseSource).concat(commercial), state);
 	const sources = getCosteoDistributions(state, exp.id);
 	if (legacyVat && !sources.length) {
 		if (!(draft.charges || []).some((row) => row.serviceSource) && !draft.sourceBulletinVat && !draft.sourceServiceIva) return draft;
@@ -114577,8 +114654,8 @@ function refreshDraftSources(state, legacyVat = false) {
 			delete group.shipmentMembershipPending;
 		}
 		const sourceRows = groupSourceCharges(state, group.expedienteIds, legacyVat);
-		const old = group.draft.charges.filter((row) => !row.serviceSource);
-		group.draft.charges = old.concat(sourceRows.filter((row) => row.serviceSource));
+		const old = group.draft.charges.filter((row) => !row.serviceSource && !row.purchaseSource);
+		group.draft.charges = old.concat(sourceRows.filter((row) => row.serviceSource || row.purchaseSource));
 		Object.assign(group.draft, groupVatDraft(state, group, legacyVat));
 		group.allocations = defaultAllocations(state, group, group.draft).map((row) => group.allocations?.find((prior) => prior.chargeId === row.chargeId && !group.draft.charges.find((charge) => charge.id === row.chargeId).serviceSource && prior.total === row.total && prior.currency === row.currency) || row);
 	}
@@ -114884,7 +114961,8 @@ function syncCosteoImportPackage(previous, next, action) {
 		"IMPORT_ADD_SHIPMENT_MEMBER",
 		"IMPORT_EDIT_SHIPMENT_NUMBERS"
 	].includes(action.type) && next.costingGroups?.some((group) => group.fromImportaciones || group.shipmentMembershipPending)) return initializeCosteoFollowup(next, legacyVat, legacySources);
-	if ([
+	const purchaseUpdate = action.type === "COMPRA_UPDATE_INVOICE" && action.payload?.chargesOnly;
+	if (purchaseUpdate || [
 		"IMPORT_SAVE_SERVICE",
 		"IMPORT_UPDATE_SERVICE",
 		"IMPORT18_LINK_REIMBURSEMENT"
@@ -114893,7 +114971,9 @@ function syncCosteoImportPackage(previous, next, action) {
 		for (const exp of refreshed.expedientes) if (exp.costeo.followup.versions.length && !exp.costeo.followup.draft) {
 			const before = getCosteoDistributions(previous, exp.id), after = getCosteoDistributions(refreshed, exp.id);
 			const oldExp = previous.expedientes.find((item) => item.id === exp.id);
-			if (!legacyVat && oldExp && JSON.stringify(registeredBulletinVat(previous, oldExp)) !== JSON.stringify(registeredBulletinVat(refreshed, exp)) || JSON.stringify(before) !== JSON.stringify(after)) {
+			const changedVat = !legacyVat && oldExp && JSON.stringify(registeredBulletinVat(previous, oldExp)) !== JSON.stringify(registeredBulletinVat(refreshed, exp));
+			const changedPurchase = purchaseUpdate && !exp.costeo.followup.finalizedAt && oldExp && JSON.stringify(purchaseCharges(oldExp)) !== JSON.stringify(purchaseCharges(exp));
+			if (changedVat || changedPurchase || JSON.stringify(before) !== JSON.stringify(after)) {
 				exp.costeo.followup.pendingServiceSnapshot = {
 					at: action.at,
 					action: action.type,
@@ -116601,7 +116681,7 @@ function reduceCosteoFollowup(source, action) {
 			requireCondition(!followup.releasedAt && !followup.finalizedAt, "Esta OI ya está cerrada.");
 			requireCondition(["continue", "revalidate"].includes(p.decision), "Seleccione continuar o corregir el costeo.");
 			requireCondition(!followup.pendingTaxSnapshot || p.decision === "revalidate", "Existe un resultado arancelario nuevo; revalide el costeo.");
-			requireCondition(!followup.pendingServiceSnapshot || p.decision === "revalidate", "La factura de servicio cambió; revalida el costeo con su fuente vigente.");
+			requireCondition(!followup.pendingServiceSnapshot || p.decision === "revalidate", "La factura de origen cambió; revalida el costeo con su fuente vigente.");
 			if (p.decision === "revalidate") requireCondition(!getCosteoGroup(state, exp.id)?.expedienteIds.some((id) => expFor(state, id).costeo.followup.finalizedAt), "El consolidado ya tiene una OI entregada. Cambia el Excel de esta OI o gestiona la corrección del reporte entregado.");
 			attempt.review = {
 				decision: p.decision,
@@ -118133,7 +118213,7 @@ function restoreJournalUI(initial, state, { pendingReplay = false } = {}) {
 }
 //#endregion
 //#region src/adapters/web/startupRead.js
-var webCheckpointContract = "64b590501cc6c6c47adede96ccc9ff4d19b99c953dcc7370ee5beb972258b6ee";
+var webCheckpointContract = "490ddcf219d79430b0c93733637afce3e33e13593151399ad05408adc7f2f036";
 var startupRequest;
 function stateReadPath(simple, contract) {
 	const params = new URLSearchParams();
@@ -120046,7 +120126,7 @@ var checkpointAssetBase = "/demo-app-importaciones-cp/";
 var checkpointProcessorContract = webCheckpointContract;
 async function buildStartupCheckpoint(state, readPublishedAsset) {
 	const prior = state.checkpoint;
-	if (!Number.isSafeInteger(state.revision) || state.revision < 1 || !Array.isArray(state.actions) || prior && prior.contract !== "64b590501cc6c6c47adede96ccc9ff4d19b99c953dcc7370ee5beb972258b6ee" || (prior?.revision || 0) + state.actions.length !== state.revision) throw Error("No se puede consolidar una revisión incompleta.");
+	if (!Number.isSafeInteger(state.revision) || state.revision < 1 || !Array.isArray(state.actions) || prior && prior.contract !== "490ddcf219d79430b0c93733637afce3e33e13593151399ad05408adc7f2f036" || (prior?.revision || 0) + state.actions.length !== state.revision) throw Error("No se puede consolidar una revisión incompleta.");
 	const [initial, journal] = await Promise.all([prepareStartupSession({
 		designVersion: "v18",
 		deferArticleMaster: true,
