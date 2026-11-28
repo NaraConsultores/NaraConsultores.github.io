@@ -2496,7 +2496,7 @@ function configuredProjectionConcepts(config) {
 	}));
 }
 //#endregion
-//#region ../../../../04_DEMO/02_app/node_modules/pdf-lib/dist/pdf-lib.esm.js
+//#region ../../../atlas-guardado-sin-bloqueo/04_DEMO/02_app/node_modules/pdf-lib/dist/pdf-lib.esm.js
 /*! *****************************************************************************
 Copyright (c) Microsoft Corporation. All rights reserved.
 Licensed under the Apache License, Version 2.0 (the "License"); you may not use
@@ -40324,7 +40324,7 @@ function supplierCodeFor(state, payload, config) {
 	const active = candidates.filter((row) => row.active !== false);
 	const observed = (config.providerCodes || []).filter((row) => normalized$1(row.supplier || row.label) === normalized$1(payload.supplier));
 	const codes = [...new Set((active.length ? active : observed).map((row) => text$7(row.shortCode)))].filter(Boolean);
-	if (codes.length !== 1 || !/^[A-Z0-9]+$/.test(codes[0]) || active.length && active.some((row) => !text$7(row.shortCode))) throw new Error("El proveedor necesita un código corto único y completo para generar el ID; no se inventó una abreviatura.");
+	if (codes.length !== 1 || !/^[A-Z0-9]+$/.test(codes[0]) || active.length && active.some((row) => !text$7(row.shortCode))) throw new Error(`El proveedor «${text$7(payload.supplier)}» necesita un código corto único para «${text$7(payload.company)}». Solicita revisarlo en Administración → Catálogo de proveedores.`);
 	return codes[0];
 }
 /** Pure reservation: returned counters become effective only when the opening succeeds. */
@@ -118282,7 +118282,7 @@ function restoreJournalUI(initial, state, { pendingReplay = false } = {}) {
 }
 //#endregion
 //#region src/adapters/web/startupRead.js
-var webCheckpointContract = "a1320cd91e78d02f5d9b4d294c7c8e6b8415c80d5a75aa2fb580ad8a3cd50b48";
+var webCheckpointContract = "693e8b2362c076036e788696d9dfb809d4d844ac7062fbbb7698e0bc24c08745";
 var startupRequest;
 function stateReadPath(simple, contract, after) {
 	const params = new URLSearchParams();
@@ -118528,18 +118528,20 @@ async function openWebDemo({ endpoint, alternateEndpoint, shared = false, storag
 	let remote = await readRemote(contract, true);
 	if (remote.checkpoint && (!contract || remote.checkpoint.contract !== contract || !Number.isSafeInteger(remote.checkpoint.revision) || remote.checkpoint.revision < 1 || remote.checkpoint.revision + remote.actions.length !== remote.revision || typeof remote.checkpoint.payload !== "string")) remote = await readRemote();
 	const canReset = !shared && remote.canReset !== false;
+	const workspaceStatus = shared ? "Demo compartida" : "Demo personal";
 	const savedStatus = shared ? "Guardado en la demo compartida" : "Guardado en esta demo";
 	let revision = remote.revision;
 	const actions = await hydrateEntries(remote.actions, remote.attachmentSizes);
 	let checkpoint = remote.checkpoint;
 	let checkpointSizes = checkpoint ? remote.attachmentSizes : void 0;
 	let actionCount = (checkpoint?.revision || 0) + actions.length;
-	if (actionCount) onStatus(savedStatus);
-	else if (shared) onStatus("Demo compartida");
+	if (shared || actionCount) onStatus(workspaceStatus);
 	let pending = 0, failed = null, tail = Promise.resolve();
-	let resetting = false, resetKey, unsavedOpening = false;
-	let replayFrom;
+	let resetting = false, resetKey;
 	const pendingSaves = [];
+	const sharedPending = /* @__PURE__ */ new Map();
+	const recoveredSaves = /* @__PURE__ */ new Map();
+	const foregroundAttempts = /* @__PURE__ */ new WeakMap();
 	const rejectedSave = (error) => [
 		400,
 		401,
@@ -118558,14 +118560,14 @@ async function openWebDemo({ endpoint, alternateEndpoint, shared = false, storag
 		504,
 		546
 	].includes(error.status);
-	const canRetryPending = () => Boolean(failed && pendingSaves.length && (temporarySave(failed) || failed.status === 507));
+	const canRetryPending = () => shared ? sharedPending.size > 0 : Boolean(failed && pendingSaves.length && (temporarySave(failed) || failed.status === 507));
 	const blockedSave = () => Object.assign(Error(canRetryPending() ? "Hay cambios de un guardado anterior pendientes. Usa Reintentar guardado en el menú lateral." : "Hay un guardado anterior sin confirmar. Vuelve a abrir ATLAS para comprobar qué quedó guardado."), {
 		cause: failed,
 		status: failed?.status
 	});
-	function showSaveStatus() {
+	function showSaveStatus(idleStatus = savedStatus) {
 		onRetryAvailable(canRetryPending() && !pending);
-		onStatus(pending ? "Guardando…" : failed ? "Guardado anterior pendiente de confirmar" : unsavedOpening ? "Captura pendiente de guardar" : savedStatus);
+		onStatus(pending ? "Guardando…" : sharedPending.size ? "Cambios pendientes en esta pestaña" : failed ? "Guardado anterior pendiente de confirmar" : idleStatus);
 	}
 	async function restoreFullHistory() {
 		const full = await readRemote();
@@ -118594,25 +118596,28 @@ async function openWebDemo({ endpoint, alternateEndpoint, shared = false, storag
 		if (!shared || syncing || pending || resetting) return;
 		syncing = true;
 		try {
-			if (failed && canRetryPending() && temporarySave(failed)) await retryPendingSave();
-			if (failed || pending || resetting) return;
 			const currentRevision = revision;
-			const { revision: from, actionCount: fromCount } = replayFrom || {
-				revision,
-				actionCount
-			};
-			const update = await readNewEntries(from, fromCount);
-			if (pending || failed || resetting || revision !== currentRevision || !update.entries.length) return;
-			if (await apply(update.entries)) {
+			const currentCount = actionCount;
+			const update = await readNewEntries(currentRevision, currentCount);
+			if (pending || resetting || revision !== currentRevision) return;
+			if (update.entries.length && await apply(update.entries)) {
 				revision = update.revision;
-				actionCount = fromCount + update.entries.length;
-				replayFrom = void 0;
+				actionCount = currentCount + update.entries.length;
+			}
+			if ([...sharedPending.values()].some((job) => temporarySave(job.error))) {
+				await retryPendingSave({ automatic: true });
+				if (pending || resetting || revision !== update.revision) return;
+				const recovered = await readNewEntries(revision, actionCount);
+				if (recovered.entries.length && await apply(recovered.entries)) {
+					revision = recovered.revision;
+					actionCount += recovered.entries.length;
+				}
 			}
 		} finally {
 			syncing = false;
 		}
 	}
-	async function write(action, ui, before, after, key, files, rememberFile, onProgress) {
+	async function write(action, ui, before, after, key, files, rememberFile, onProgress, expectedRevision) {
 		const entry = await prepareEntry(action, ui, rememberFile, after);
 		for (const [completed, { file, path }] of files.entries()) {
 			onProgress?.({
@@ -118622,7 +118627,7 @@ async function openWebDemo({ endpoint, alternateEndpoint, shared = false, storag
 			});
 			const query = new URLSearchParams({
 				path,
-				revision
+				revision: expectedRevision
 			});
 			const body = await materializeFile(file);
 			await retryTransient(() => request("upload?" + query, {
@@ -118633,23 +118638,21 @@ async function openWebDemo({ endpoint, alternateEndpoint, shared = false, storag
 		}
 		onProgress?.({ label: "Esperando confirmación del guardado…" });
 		const body = JSON.stringify({
-			revision,
+			revision: expectedRevision,
 			key,
 			entry,
 			...webPersistenceChanges(before, after)
 		});
-		const confirmed = await retryTransient(() => request("commit", {
+		return (await (await retryTransient(() => request("commit", {
 			method: "POST",
 			headers: { "Content-Type": "application/json" },
 			body
-		}));
-		({revision} = await confirmed.json());
-		actionCount++;
+		}))).json()).revision;
 	}
-	function enqueue(action, ui, { before, after, onProgress, waitForSave = false }, rebase) {
+	function enqueue(action, ui, { before, after, onProgress, waitForSave = false, operationId, saveToken }, rebase) {
 		assertWritable();
 		const key = crypto.randomUUID();
-		const confirmed = Boolean(rebase || waitForSave);
+		const confirmed = Boolean(rebase || waitForSave || saveToken);
 		const files = [], references = /* @__PURE__ */ new WeakMap();
 		const rememberFile = (file) => {
 			if (references.has(file)) return references.get(file);
@@ -118671,62 +118674,115 @@ async function openWebDemo({ endpoint, alternateEndpoint, shared = false, storag
 		};
 		pending++;
 		showSaveStatus();
-		let startingPoint;
+		let save = {
+			action,
+			before,
+			after
+		};
+		let expectedRevision = rebase ? revision : void 0;
+		let expectedCount = rebase ? actionCount : void 0;
+		let entries = [];
 		async function saveEntry() {
-			startingPoint = {
-				revision,
-				actionCount
-			};
-			let save = {
-				action,
-				before,
-				after
-			};
-			const entries = [];
-			for (let attempt = 0;; attempt++) {
-				const knownRevision = revision, knownCount = actionCount;
-				try {
-					await write(save.action, ui, save.before, save.after, key, files, rememberFile, onProgress);
-					return save.after;
-				} catch (error) {
-					if (!rebase || error.status !== 409) throw error;
-					if (attempt >= 2) throw Object.assign(Error("Hubo varios guardados al mismo tiempo. Tus datos siguen en pantalla. Intenta guardar de nuevo."), { status: 409 });
-					const latest = await readNewEntries(knownRevision, knownCount);
-					if (!latest.entries.length) throw error;
-					entries.push(...latest.entries);
-					save = await rebase(entries);
-					revision = latest.revision;
-					actionCount += latest.entries.length;
+			expectedRevision ??= revision;
+			expectedCount ??= actionCount;
+			for (let attempt = 0;; attempt++) try {
+				const savedRevision = await write(save.action, ui, save.before, save.after, key, files, rememberFile, onProgress, expectedRevision);
+				return {
+					state: save.after,
+					revision: savedRevision,
+					count: expectedCount + 1
+				};
+			} catch (error) {
+				if (!rebase || error.status !== 409) throw error;
+				if (attempt >= 2) throw Object.assign(Error("Hubo varios guardados al mismo tiempo. Tus datos siguen en pantalla. Intenta guardar de nuevo."), { status: 409 });
+				const latest = await readNewEntries(expectedRevision, expectedCount);
+				if (!latest.entries.length) {
+					if (!saveToken) throw error;
+					throw Object.assign(Error("No se pudo confirmar este guardado. Tu captura sigue abierta para reintentar."), {
+						status: 409,
+						cause: error
+					});
 				}
+				const changes = [...entries, ...latest.entries];
+				save = await rebase(changes);
+				entries = changes;
+				expectedRevision = latest.revision;
+				expectedCount += latest.entries.length;
 			}
 		}
+		const jobId = operationId ?? key;
+		const attempts = saveToken && (foregroundAttempts.get(saveToken) || /* @__PURE__ */ new Map());
+		const previousAttempt = attempts ? attempts.get(jobId) : sharedPending.get(jobId);
+		const job = previousAttempt && previousAttempt.operationId === operationId ? previousAttempt : {
+			saveEntry,
+			operationId
+		};
 		const done = tail.then(() => {
 			if (failed) throw blockedSave();
-			return saveEntry();
+			return job.saveEntry();
+		}).then((result) => {
+			if (saveToken && result.revision <= revision) return before;
+			if (result.revision >= revision) {
+				revision = result.revision;
+				actionCount = result.count;
+			}
+			return result.state;
 		}).finally(() => {
 			pending--;
 		});
 		tail = done.then(() => {
-			if (rebase) unsavedOpening = false;
+			attempts?.delete(jobId);
+			sharedPending.delete(jobId);
 			showSaveStatus();
 		}, (error) => {
-			if (rebase) unsavedOpening = true;
-			if (!confirmed || temporarySave(error)) pendingSaves.push(saveEntry);
-			if (confirmed && shared && temporarySave(error)) replayFrom ||= startingPoint;
-			if (!confirmed || !rejectedSave(error)) failed ||= error;
-			if (startingPoint && rebase && !failed) ({revision, actionCount} = startingPoint);
-			showSaveStatus();
-			if (!confirmed && failed === error) notify(error.message, "error");
+			if (attempts) if (temporarySave(error) || error.status === 507) {
+				attempts.set(jobId, job);
+				foregroundAttempts.set(saveToken, attempts);
+			} else attempts.delete(jobId);
+			else if (shared) {
+				if (temporarySave(error) || error.status === 507 && files.length || !confirmed || sharedPending.has(jobId)) sharedPending.set(jobId, {
+					...job,
+					error
+				});
+				if (!confirmed) notify(error.message, "error");
+			} else {
+				if (!confirmed || temporarySave(error)) pendingSaves.push(saveEntry);
+				if (!confirmed || !rejectedSave(error)) failed ||= error;
+				if (!confirmed && failed === error) notify(error.message, "error");
+			}
+			showSaveStatus(attempts ? workspaceStatus : void 0);
 		});
 		return confirmed ? done : void 0;
 	}
-	function retryPendingSave() {
+	function retryPendingSave({ automatic = false } = {}) {
 		if (pending || !canRetryPending()) return tail;
 		pending++;
 		showSaveStatus();
 		const done = tail.then(async () => {
+			if (shared) {
+				let error;
+				for (const [id, job] of sharedPending) {
+					if (automatic && !temporarySave(job.error)) continue;
+					try {
+						const result = await job.saveEntry();
+						if (job.operationId !== void 0) recoveredSaves.set(job.operationId, result.revision);
+						sharedPending.delete(id);
+					} catch (cause) {
+						sharedPending.set(id, {
+							...job,
+							error: cause
+						});
+						error ??= cause;
+					}
+					if (automatic && pending > 1) break;
+				}
+				if (!automatic && error) throw error;
+				return;
+			}
 			while (pendingSaves.length) {
-				await pendingSaves[0]();
+				const result = await pendingSaves[0]();
+				revision = result.revision;
+				actionCount = result.count;
 				pendingSaves.shift();
 			}
 			failed = null;
@@ -118734,7 +118790,7 @@ async function openWebDemo({ endpoint, alternateEndpoint, shared = false, storag
 			pending--;
 		});
 		tail = done.then(showSaveStatus, (error) => {
-			failed = error;
+			if (!shared) failed = error;
 			showSaveStatus();
 		});
 		return done;
@@ -118761,7 +118817,6 @@ async function openWebDemo({ endpoint, alternateEndpoint, shared = false, storag
 			({revision} = await result.json());
 			actions.length = 0;
 			actionCount = 0;
-			replayFrom = void 0;
 			failed = null;
 			pendingSaves.length = 0;
 			onRetryAvailable(false);
@@ -118776,7 +118831,7 @@ async function openWebDemo({ endpoint, alternateEndpoint, shared = false, storag
 		}
 	}
 	function guard(event) {
-		if (pending || failed || resetting || unsavedOpening) {
+		if (pending || failed || sharedPending.size || resetting) {
 			event.preventDefault();
 			event.returnValue = true;
 		}
@@ -118787,9 +118842,15 @@ async function openWebDemo({ endpoint, alternateEndpoint, shared = false, storag
 		const { matches } = await (await request("cotejo?" + new URLSearchParams({ expediente: expedienteId }), { signal })).json();
 		return matches;
 	}
+	function takeRecoveredSave(operationId) {
+		if (!recoveredSaves.has(operationId) || recoveredSaves.get(operationId) > revision) return false;
+		return recoveredSaves.delete(operationId);
+	}
 	return {
 		actions,
 		canReset,
+		shared,
+		confirmsWrites: true,
 		enqueue,
 		reset,
 		guard,
@@ -118797,6 +118858,9 @@ async function openWebDemo({ endpoint, alternateEndpoint, shared = false, storag
 		syncFromServer,
 		saveOpening: shared ? enqueue : void 0,
 		lookupSharedReview: shared ? lookupSharedReview : void 0,
+		hasRecoveredSave: (operationId) => recoveredSaves.has(operationId),
+		takeRecoveredSave,
+		hasForegroundAttempt: (saveToken, operationId) => Boolean(saveToken && foregroundAttempts.get(saveToken)?.has(operationId)),
 		get checkpoint() {
 			return checkpoint;
 		},
@@ -119826,6 +119890,7 @@ var DEMO_SUPPLIER_CODES = {
 	"Eastman Hongkong Pvt Ltd": "EAS",
 	"Eneos Mexico S.A de C.V": "ENE1",
 	"Hero Motocorp Ltd": "HER1",
+	"Jiangmen Haojue Import & Export Trade Co., Ltd.": "JIA",
 	"Magyar Suzuki Zrt. Spare Parts Group": "MAG",
 	"Maruti Suzuki India": "MAR",
 	"PT Suzuki Indomobil Sales": "PT",
@@ -120229,7 +120294,7 @@ var checkpointAssetBase = "/demo-app-importaciones-cp/";
 var checkpointProcessorContract = webCheckpointContract;
 async function buildStartupCheckpoint(state, readPublishedAsset) {
 	const prior = state.checkpoint;
-	if (!Number.isSafeInteger(state.revision) || state.revision < 1 || !Array.isArray(state.actions) || prior && prior.contract !== "a1320cd91e78d02f5d9b4d294c7c8e6b8415c80d5a75aa2fb580ad8a3cd50b48" || (prior?.revision || 0) + state.actions.length !== state.revision) throw Error("No se puede consolidar una revisión incompleta.");
+	if (!Number.isSafeInteger(state.revision) || state.revision < 1 || !Array.isArray(state.actions) || prior && prior.contract !== "693e8b2362c076036e788696d9dfb809d4d844ac7062fbbb7698e0bc24c08745" || (prior?.revision || 0) + state.actions.length !== state.revision) throw Error("No se puede consolidar una revisión incompleta.");
 	const [initial, journal] = await Promise.all([prepareStartupSession({
 		designVersion: "v18",
 		deferArticleMaster: true,

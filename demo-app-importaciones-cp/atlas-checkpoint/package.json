@@ -1,7 +1,7 @@
 {
   "name": "gestion-compras-apex-demo",
   "private": true,
-  "version": "0.16.179-demo",
+  "version": "0.16.180-demo",
   "type": "module",
   "scripts": {
     "dev": "vite",
